@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { img } from "@/lib/catalog";
+import logoCompact from "@/assets/logo-compact.png";
 
 const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide Shipping", "Diwali Special Collection Live", "WhatsApp Business Enquiries"];
 
@@ -16,7 +17,7 @@ const shopMenu = [
 const weddingMenu = [
   { title: "Wedding / Vivah", links: ["Vivah Pooja Kit", "Mandap Essentials", "Kanyadaan Items"], img: img.wedding },
   { title: "Haldi", links: ["Haldi Trays", "Haldi Décor", "Ubtan Bowls"], img: img.haldi },
-  { title: "Mehendi", links: ["Mehendi Platters", "Guest Favours", "Floral Props"], img: img.haldi },
+  { title: "Mehendi", links: ["Mehendi Platters", "Guest Favours", "Floral Props"], img: img.mehendi },
   { title: "Sangeet", links: ["Décor Accents", "Return Gifts", "Props"], img: img.crochet },
   { title: "Engagement / Roka / Ring", links: ["Ring Trays", "Roka Thali", "Shagun Boxes"], img: img.mala },
   { title: "Tilak / Sagai", links: ["Tilak Thali", "Sagai Hampers", "Dry Fruit Plates"], img: img.hamper },
@@ -44,7 +45,7 @@ export function Header() {
   const [mExp, setMExp] = useState<string | null>(null);
 
   return (
-    <header className="sticky top-0 z-50 bg-background" onMouseLeave={() => setOpen(null)}>
+    <>
       <div className="overflow-hidden bg-royal text-on-dark">
         <div className="flex w-max animate-marquee gap-12 py-2 text-[11px] font-semibold uppercase tracking-[0.2em]">
           {[...announcements, ...announcements, ...announcements, ...announcements].map((a, i) => (
@@ -52,18 +53,17 @@ export function Header() {
           ))}
         </div>
       </div>
-
+    <header className="sticky top-0 z-50 bg-background" onMouseLeave={() => setOpen(null)}>
       <div className="border-b">
-        <div className="container-x flex items-center gap-4 py-4 lg:gap-8">
+        <div className="container-x flex h-16 items-center gap-4 lg:gap-8">
           <button className="lg:hidden" aria-label="Open menu" onClick={() => setMobile(true)}><Menu className="h-6 w-6" /></button>
-          <Link to="/" className="flex shrink-0 flex-col leading-none">
-            <span className="font-display text-2xl font-semibold text-maroon md:text-3xl">Murlit</span>
-            <span className="text-[9px] font-bold uppercase tracking-[0.42em] text-leaf">Enterprises</span>
+          <Link to="/" aria-label="Murlit Enterprises — Home" className="shrink-0">
+            <img src={logoCompact} alt="Murlit Enterprises" width={1174} height={829} className="h-10 w-auto object-contain lg:h-12" />
           </Link>
           <label className="relative hidden flex-1 md:block">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input placeholder="Search kits, mala, potli, wedding items..."
-              className="w-full rounded-full border bg-sage py-3 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background" />
+              className="w-full rounded-full border bg-sage py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background" />
           </label>
           <div className="ml-auto flex items-center gap-1 md:gap-3">
             <select aria-label="Currency" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
@@ -85,7 +85,7 @@ export function Header() {
         <nav className="container-x hidden items-center justify-center gap-7 lg:flex">
           {nav.map((n) => (
             <a key={n.label} href={n.href} onMouseEnter={() => setOpen(n.mega ?? null)}
-              className={`relative flex items-center gap-1 py-3.5 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}>
+              className={`relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}>
               {n.label}{n.mega && <ChevronDown className="h-3 w-3" />}
               {n.emph && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-leaf" />}
             </a>
@@ -146,7 +146,7 @@ export function Header() {
         <div className="fixed inset-0 z-50 bg-ink/40 lg:hidden" onClick={() => setMobile(false)}>
           <div className="h-full w-[85%] max-w-sm overflow-y-auto bg-background p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
-              <span className="font-display text-2xl text-maroon">Murlit</span>
+              <img src={logoCompact} alt="Murlit Enterprises" className="h-10 w-auto object-contain" />
               <button aria-label="Close menu" onClick={() => setMobile(false)}><X className="h-6 w-6" /></button>
             </div>
             <input placeholder="Search kits, mala, potli..." className="mb-4 w-full rounded-full border bg-sage px-4 py-2.5 text-sm" />
@@ -167,5 +167,6 @@ export function Header() {
         </div>
       )}
     </header>
+    </>
   );
 }

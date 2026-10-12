@@ -85,7 +85,10 @@
 
 @layer base {
   * { border-color: var(--color-border); }
-  html { scroll-behavior: smooth; }
+  :root { --header-h: 64px; }
+  @media (min-width: 1024px) { :root { --header-h: 108px; } }
+  html { scroll-behavior: smooth; scroll-padding-top: var(--header-h); scroll-snap-type: y proximity; overflow-x: hidden; }
+  body { overflow-x: hidden; }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -119,3 +122,15 @@
 
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @utility animate-marquee { animation: marquee 40s linear infinite; }
+
+@utility screen-section {
+  min-height: calc(100svh - var(--header-h));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: clamp(24px, 4vh, 48px);
+  scroll-snap-align: start;
+}
+@utility text-hero { font-size: clamp(2.75rem, min(7vw, 9svh), 6.5rem); }
+@utility text-display { font-size: clamp(2rem, min(4.2vw, 6svh), 3.75rem); }
+@utility text-section { font-size: clamp(1.85rem, min(3.4vw, 5svh), 3rem); }

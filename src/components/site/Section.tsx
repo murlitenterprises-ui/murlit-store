@@ -2,11 +2,11 @@ import type { ReactNode } from "react";
 
 export function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: string; action?: ReactNode }) {
   return (
-    <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="mb-[clamp(12px,3vh,36px)] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div className="max-w-2xl">
         <span className="eyebrow ornament">{eyebrow}</span>
-        <h2 className="mt-3 text-4xl font-medium leading-[1.05] md:text-5xl">{title}</h2>
-        {sub && <p className="mt-3 text-muted-foreground">{sub}</p>}
+        <h2 className="mt-2 text-section font-medium leading-[1.05]">{title}</h2>
+        {sub && <p className="mt-2 text-muted-foreground">{sub}</p>}
       </div>
       {action}
     </div>
