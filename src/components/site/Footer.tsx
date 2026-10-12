@@ -1,3 +1,4 @@
+import logoFull from "@/assets/logo-full.png";
 import { Instagram, Facebook, Youtube, Linkedin, Phone, Mail, MessageCircle } from "lucide-react";
 
 const cols = [
@@ -13,8 +14,7 @@ export function Footer() {
       <div className="h-1 bg-ember" />
       <div className="container-x grid gap-10 py-16 md:grid-cols-2 lg:grid-cols-6">
         <div className="lg:col-span-2">
-          <span className="font-display text-3xl font-semibold text-maroon">Murlit</span>
-          <span className="block text-[9px] font-bold uppercase tracking-[0.42em] text-leaf">Enterprises</span>
+          <img src={logoFull} alt="Murlit Enterprises — Tradition, Quality & Spirituality" width={1174} height={940} loading="lazy" className="h-[120px] w-auto object-contain" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
             Pooja samagri, wedding essentials, handcrafted treasures and personalised gifts — curated for every meaningful occasion.
           </p>

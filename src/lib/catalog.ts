@@ -6,13 +6,14 @@ import hamper from "@/assets/hamper.jpg";
 import diwali from "@/assets/diwali.jpg";
 import haldi from "@/assets/haldi.jpg";
 import poojakit from "@/assets/poojakit.jpg";
+import mehendi from "@/assets/mehendi.jpg";
 
-export const img = { hero, wedding, mala, crochet, hamper, diwali, haldi, poojakit };
+export const img = { hero, wedding, mala, crochet, hamper, diwali, haldi, poojakit, mehendi };
 
 export const occasions = [
   { name: "Wedding / Vivah", img: wedding },
   { name: "Haldi", img: haldi },
-  { name: "Mehendi", img: haldi },
+  { name: "Mehendi", img: mehendi },
   { name: "Sangeet", img: crochet },
   { name: "Engagement / Roka", img: mala },
   { name: "Diwali", img: diwali },

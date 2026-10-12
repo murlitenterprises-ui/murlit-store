@@ -3,12 +3,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { inr, type Product } from "@/lib/catalog";
 
-export function ProductCard({ p }: { p: Product }) {
+export function ProductCard({ p, compact }: { p: Product; compact?: boolean }) {
   const [liked, setLiked] = useState(false);
   const off = p.mrp ? Math.round((1 - p.price / p.mrp) * 100) : 0;
   return (
     <div className="group flex flex-col">
-      <div className="relative aspect-[4/5] overflow-hidden rounded-md bg-sage">
+      <div className={`relative aspect-[4/5] overflow-hidden rounded-md bg-sage ${compact ? "md:aspect-auto md:h-[min(22svh,320px)]" : ""}`}>
         <img src={p.img} alt={p.name} loading="lazy" width={1024} height={1024}
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
         {p.badge && (
@@ -31,11 +31,11 @@ export function ProductCard({ p }: { p: Product }) {
           </button>
         </div>
       </div>
-      <div className="mt-3 space-y-1">
+      <div className={compact ? "mt-2 space-y-0.5" : "mt-3 space-y-1"}>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Star className="h-3 w-3 fill-gold text-gold" /> {p.rating} <span className="opacity-70">· sample rating</span>
         </div>
-        <h3 className="font-display text-lg leading-tight">{p.name}</h3>
+        <h3 className={`font-display leading-tight ${compact ? "text-base" : "text-lg"}`}>{p.name}</h3>
         <div className="flex items-baseline gap-2 text-sm">
           <span className="font-bold">{inr(p.price)}</span>
           {p.mrp && <span className="text-muted-foreground line-through">{inr(p.mrp)}</span>}
