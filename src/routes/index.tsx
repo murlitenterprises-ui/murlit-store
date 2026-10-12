@@ -231,7 +231,7 @@ function Handcrafted() {
         </div>
         <div className="grid grid-cols-2 gap-4 lg:col-span-3">
           <img src={img.crochet} alt="Crochet varmala and flowers" loading="lazy" className="row-span-2 h-full w-full rounded-md object-cover" />
-          <ProductCard p={products[9]} />
+          <ProductCard p={products[9]!} />
         </div>
       </div>
     </section>

@@ -31,7 +31,7 @@ function Shop() {
 
   const list = useMemo(() => {
     let l = products.filter((p) => (!cat.length || cat.includes(p.category)) && (!occ.length || occ.includes(p.occasion)) &&
-      (price === null || (p.price >= prices[price][1] && p.price <= prices[price][2])));
+      (price === null || (p.price >= prices[price]![1] && p.price <= prices[price]![2])));
     if (sort === "low") l = [...l].sort((a, b) => a.price - b.price);
     if (sort === "high") l = [...l].sort((a, b) => b.price - a.price);
     return l;
