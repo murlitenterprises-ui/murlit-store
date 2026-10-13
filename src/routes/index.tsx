@@ -63,7 +63,7 @@ function Hero() {
             <a href="/shop" className={btnPrimary}>Explore Collections <ArrowRight className="h-4 w-4" /></a>
             <a href="#custom" className={btnOutline}>Create Something Custom</a>
           </div>
-          <div className="mt-8 grid grid-cols-3 gap-4 border-t pt-5 text-xs font-semibold">
+          <div className="mt-6 hidden grid-cols-3 gap-4 border-t pt-5 sm:grid text-xs font-semibold">
             {[[Sparkles, "Custom orders"], [Package, "Bulk & wholesale"], [Globe, "Worldwide enquiries"]].map(([I, t]: any) => (
               <div key={t} className="flex items-center gap-2"><I className="h-4 w-4 text-leaf" />{t}</div>
             ))}
@@ -71,7 +71,7 @@ function Hero() {
         </div>
         <div className="relative lg:col-span-7">
           <div className="overflow-hidden rounded-md shadow-lift">
-            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[30svh] w-full lg:max-h-[70svh] object-cover" />
+            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[26svh] w-full lg:max-h-[70svh] object-cover" />
           </div>
           <div className="absolute -bottom-6 -left-4 hidden w-[min(14rem,22svh)] overflow-hidden rounded-md border-4 border-background shadow-lift md:block">
             <img src={img.mala} alt="Elaichi mala" loading="lazy" className="aspect-square w-full object-cover" />
@@ -246,13 +246,13 @@ function B2B() {
     <section id="b2b" className="screen-section ">
       <div className="container-x">
         <div className="rounded-md border-t-4 border-leaf bg-sage p-5 md:p-10">
-          <div className="grid gap-8 lg:grid-cols-2">
+          <div className="grid gap-5 md:gap-8 lg:grid-cols-2">
             <div>
               <span className="text-xs font-bold uppercase tracking-[0.25em] text-leaf">B2B / Bulk</span>
               <h2 className="mt-3 text-display font-medium leading-none">Your Trusted Partner for Bulk & Wholesale Orders.</h2>
               <p className="mt-3 text-sm text-muted-foreground md:text-base">Thoughtfully curated products for retailers, wedding planners, event organizers, temples, resellers, and corporate gifting.</p>
-              <div className="mt-4 flex flex-wrap gap-1.5 md:mt-6 md:grid md:grid-cols-2 md:gap-2">
-                {feats.map((f) => <div key={f} className="flex items-center gap-2 rounded-sm bg-background px-2 py-1 text-[11px] font-semibold md:p-2.5 md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
+              <div className="no-scrollbar -mx-5 mt-4 flex gap-1.5 overflow-x-auto px-5 md:mx-0 md:mt-6 md:px-0 md:overflow-visible md:grid md:grid-cols-2 md:gap-2">
+                {feats.map((f) => <div key={f} className="flex items-center gap-2 shrink-0 rounded-sm bg-background px-2 py-1 text-[11px] font-semibold md:p-2.5 md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
               </div>
             </div>
             <div className="flex flex-col">
@@ -267,12 +267,12 @@ function B2B() {
                   </thead>
                   <tbody>
                     {tiers.map(([q, p, s]) => (
-                      <tr key={q} className="border-t"><td className="px-5 py-3 font-semibold">{q}</td><td className="font-bold text-maroon">{p}</td><td className="text-leaf">{s}</td></tr>
+                      <tr key={q} className="border-t"><td className="px-5 py-2 font-semibold md:py-3">{q}</td><td className="font-bold text-maroon">{p}</td><td className="text-leaf">{s}</td></tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-4 flex flex-wrap gap-2 md:mt-6 md:gap-3 [&>*]:max-md:px-3 [&>*]:max-md:py-2.5 [&>*]:max-md:text-xs">
                 <a href="#contact" className={`${btn} bg-leafy text-on-dark hover:brightness-110`}>Request a Bulk Quote</a>
                 <a href="/shop" className={btnOutline}>View Wholesale Collection</a>
                 <button className={`${btn} underline-offset-4 hover:underline`}>Download Catalogue</button>
