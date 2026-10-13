@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { img } from "@/lib/catalog";
 import logoCompact from "@/assets/logo-compact.png";
 
@@ -43,9 +43,32 @@ export function Header() {
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
   const [mExp, setMExp] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const busy = useRef(false);
+  busy.current = !!open || mobile;
+
+  useEffect(() => {
+    let last = window.scrollY, ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY, d = y - last;
+        const focusInside = document.activeElement?.closest("[data-site-header]");
+        if (y < 80 || busy.current || focusInside) setHidden(false);
+        else if (d > 8) setHidden(true);
+        else if (d < -8) setHidden(false);
+        if (Math.abs(d) > 8 || y < 80) last = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <>
+    <header data-site-header onMouseLeave={() => setOpen(null)}
+      className={`sticky top-0 z-50 bg-background transition-transform duration-300 ease-out motion-reduce:transition-none ${hidden ? "-translate-y-full" : "translate-y-0"}`}>
       <div className="overflow-hidden bg-royal text-on-dark">
         <div className="flex w-max animate-marquee gap-12 py-2 text-[11px] font-semibold uppercase tracking-[0.2em]">
           {[...announcements, ...announcements, ...announcements, ...announcements].map((a, i) => (
@@ -53,7 +76,6 @@ export function Header() {
           ))}
         </div>
       </div>
-    <header className="sticky top-0 z-50 bg-background" onMouseLeave={() => setOpen(null)}>
       <div className="border-b">
         <div className="container-x flex h-16 items-center gap-4 lg:gap-8">
           <button className="lg:hidden" aria-label="Open menu" onClick={() => setMobile(true)}><Menu className="h-6 w-6" /></button>
@@ -94,7 +116,7 @@ export function Header() {
       </div>
 
       {open === "shop" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift lg:block">
+        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x grid grid-cols-4 gap-8 py-8">
             {shopMenu.map((c) => (
               <div key={c.title}>
@@ -118,7 +140,7 @@ export function Header() {
       )}
 
       {open === "wedding" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift lg:block">
+        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x grid grid-cols-5 gap-6 py-8">
             <div className="grid grid-cols-2 col-span-4 gap-x-8 gap-y-6 lg:grid-cols-4">
               {weddingMenu.map((c) => (
@@ -144,7 +166,7 @@ export function Header() {
 
       {mobile && (
         <div className="fixed inset-0 z-50 bg-ink/40 lg:hidden" onClick={() => setMobile(false)}>
-          <div className="h-full w-[85%] max-w-sm overflow-y-auto bg-background p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-[85%] max-w-sm overflow-y-auto bg-background p-5 animate-drawer-in" onClick={(e) => e.stopPropagation()}>
             <div className="mb-5 flex items-center justify-between">
               <img src={logoCompact} alt="Murlit Enterprises" className="h-10 w-auto object-contain" />
               <button aria-label="Close menu" onClick={() => setMobile(false)}><X className="h-6 w-6" /></button>
@@ -157,7 +179,7 @@ export function Header() {
                   {n.label}{n.mega && <ChevronDown className={`h-4 w-4 transition ${mExp === n.label ? "rotate-180" : ""}`} />}
                 </button>
                 {mExp === n.label && (
-                  <ul className="space-y-2 pb-3 pl-3 text-sm text-muted-foreground">
+                  <ul className="animate-menu-in space-y-2 pb-3 pl-3 text-sm text-muted-foreground">
                     {(n.mega === "shop" ? shopMenu : weddingMenu).map((c) => <li key={c.title}><a href="/shop">{c.title}</a></li>)}
                   </ul>
                 )}
@@ -167,6 +189,5 @@ export function Header() {
         </div>
       )}
     </header>
-    </>
   );
 }
