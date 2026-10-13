@@ -8,7 +8,7 @@ export function ProductCard({ p, compact }: { p: Product; compact?: boolean }) {
   const off = p.mrp ? Math.round((1 - p.price / p.mrp) * 100) : 0;
   return (
     <div className="group flex flex-col">
-      <div className={`relative aspect-[4/5] overflow-hidden rounded-md bg-sage ${compact ? "md:aspect-auto md:h-[min(22svh,320px)]" : ""}`}>
+      <div className={`relative aspect-[4/5] overflow-hidden rounded-md bg-sage ${compact ? "md:aspect-auto md:h-[min(19svh,300px)]" : ""}`}>
         <img src={p.img} alt={p.name} loading="lazy" width={1024} height={1024}
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
         {p.badge && (
