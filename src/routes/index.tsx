@@ -71,7 +71,7 @@ function Hero() {
         </div>
         <div className="relative lg:col-span-7">
           <div className="overflow-hidden rounded-md shadow-lift">
-            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[70svh] w-full object-cover" />
+            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[30svh] w-full lg:max-h-[70svh] object-cover" />
           </div>
           <div className="absolute -bottom-6 -left-4 hidden w-[min(14rem,22svh)] overflow-hidden rounded-md border-4 border-background shadow-lift md:block">
             <img src={img.mala} alt="Elaichi mala" loading="lazy" className="aspect-square w-full object-cover" />
@@ -111,7 +111,7 @@ function Categories() {
     <section className="screen-section bg-sage">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Category" title="Curated with devotion" />
-        <div className="grid grid-cols-3 gap-x-4 gap-y-4 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-4 gap-x-3 gap-y-3 lg:grid-cols-6">
           {categories.map((c) => (
             <a key={c.name} href="/shop" className="group text-center">
               <div className="mx-auto aspect-square w-full max-w-[18svh] overflow-hidden rounded-full border-4 border-background shadow-soft">
@@ -147,12 +147,12 @@ function ShopByNeed() {
     <section className="screen-section bg-sage-fade">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Need" title="Whoever you're shopping for" sub="From one family celebration to five hundred hampers." />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-3">
           {needs.map((n, i) => (
-            <a key={n} href="/shop" className="group flex items-center gap-4 rounded-md border bg-background p-3 transition hover:border-maroon hover:shadow-soft">
+            <a key={n} href="/shop" className="group flex items-center gap-2 rounded-md border bg-background p-2 md:gap-4 md:p-3 transition hover:border-maroon hover:shadow-soft">
               <img src={needImgs[i]} alt="" loading="lazy" className="h-[min(4rem,8svh)] w-[min(4rem,8svh)] shrink-0 rounded-sm object-cover" />
-              <span className="font-display text-xl">{n}</span>
-              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-maroon" />
+              <span className="font-display text-sm leading-tight md:text-xl">{n}</span>
+              <ArrowRight className="ml-auto hidden h-4 w-4 md:block text-muted-foreground transition group-hover:translate-x-1 group-hover:text-maroon" />
             </a>
           ))}
         </div>
@@ -166,7 +166,7 @@ function Custom() {
   return (
     <section id="custom" className="screen-section ">
       <div className="container-x grid items-center gap-12 lg:grid-cols-2">
-        <div className="grid grid-cols-6 grid-rows-6 gap-3 h-[min(520px,40svh)] lg:h-[min(520px,70svh)]">
+        <div className="grid grid-cols-6 grid-rows-6 gap-3 h-[24svh] lg:h-[min(520px,70svh)]">
           <img src={img.wedding} alt="Personalised potli" loading="lazy" className="col-span-4 row-span-4 h-full w-full rounded-md object-cover" />
           <img src={img.mala} alt="Custom mala" loading="lazy" className="col-span-2 row-span-3 h-full w-full rounded-md object-cover" />
           <img src={img.hamper} alt="Custom packaging" loading="lazy" className="col-span-2 row-span-3 h-full w-full rounded-md object-cover" />
@@ -175,7 +175,7 @@ function Custom() {
         <div>
           <span className="eyebrow ornament">Customized Creations</span>
           <h2 className="mt-3 text-display font-medium leading-none">You Imagine It.<br /><em className="text-terracotta">We Create It.</em></h2>
-          <p className="mt-5 max-w-lg text-lg text-muted-foreground">Make every celebration personal with customized pooja kits, wedding accessories, handcrafted gifts, and beautifully designed packaging.</p>
+          <p className="mt-3 max-w-lg text-sm text-muted-foreground md:text-lg">Make every celebration personal with customized pooja kits, wedding accessories, handcrafted gifts, and beautifully designed packaging.</p>
           <ol className="mt-6 grid grid-cols-4 gap-3">
             {steps.map((s, i) => (
               <li key={s} className="border-t-2 border-maroon pt-3">
@@ -251,8 +251,8 @@ function B2B() {
               <span className="text-xs font-bold uppercase tracking-[0.25em] text-leaf">B2B / Bulk</span>
               <h2 className="mt-3 text-display font-medium leading-none">Your Trusted Partner for Bulk & Wholesale Orders.</h2>
               <p className="mt-5 text-muted-foreground">Thoughtfully curated products for retailers, wedding planners, event organizers, temples, resellers, and corporate gifting.</p>
-              <div className="mt-6 grid grid-cols-2 gap-2">
-                {feats.map((f) => <div key={f} className="flex items-center gap-2 rounded-sm bg-background p-2.5 text-xs font-semibold md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
+              <div className="mt-4 flex flex-wrap gap-1.5 md:mt-6 md:grid md:grid-cols-2 md:gap-2">
+                {feats.map((f) => <div key={f} className="flex items-center gap-2 rounded-sm bg-background px-2 py-1 text-[11px] font-semibold md:p-2.5 md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
               </div>
             </div>
             <div className="flex flex-col">
@@ -291,7 +291,7 @@ function Budget() {
     <section className="screen-section ">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Budget" title="Something for every purse" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {b.map(([t, src]) => (
             <a key={t} href="/shop" className="group relative aspect-[4/5] max-h-[45svh] overflow-hidden rounded-md">
               <img src={src} alt="" loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
@@ -332,11 +332,11 @@ function Story() {
   return (
     <section id="story" className="screen-section ">
       <div className="container-x grid items-center gap-12 lg:grid-cols-2">
-        <img src={img.diwali} alt="Diwali pooja setup" loading="lazy" className="aspect-[4/3] max-h-[35svh] w-full rounded-md object-cover lg:aspect-square lg:max-h-[75svh]" />
+        <img src={img.diwali} alt="Diwali pooja setup" loading="lazy" className="aspect-[4/3] max-h-[24svh] w-full rounded-md object-cover lg:aspect-square lg:max-h-[75svh]" />
         <div>
           <span className="eyebrow ornament">Our Story</span>
           <h2 className="mt-3 text-display font-medium leading-none">Rooted in Tradition. Made for Every Celebration.</h2>
-          <p className="mt-5 text-lg text-muted-foreground">From the first diya of Diwali to the last shagun of a wedding, we bring together the rituals, craft and care that make Indian celebrations whole — for families and businesses alike.</p>
+          <p className="mt-3 text-sm text-muted-foreground md:text-lg">From the first diya of Diwali to the last shagun of a wedding, we bring together the rituals, craft and care that make Indian celebrations whole — for families and businesses alike.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {t.map(([I, s]: any) => (
               <div key={s} className="flex items-start gap-3 border-l-2 border-gold pl-4"><I className="mt-0.5 h-5 w-5 text-maroon" /><span className="font-semibold">{s}</span></div>
