@@ -19,8 +19,8 @@ export const Route = createFileRoute("/")({
 });
 
 const btn = "inline-flex items-center justify-center gap-2 rounded-sm px-6 py-3.5 text-sm font-bold tracking-wide transition";
-const btnPrimary = `${btn} bg-royal text-on-dark shadow-lift hover:brightness-110`;
-const btnOutline = `${btn} border border-ink/80 hover:bg-ink hover:text-on-dark`;
+const btnPrimary = `${btn} press bg-royal text-on-dark shadow-lift hover:-translate-y-0.5 hover:brightness-110 [&_svg]:transition-transform hover:[&_svg]:translate-x-1`;
+const btnOutline = `${btn} press border border-ink/80 hover:-translate-y-0.5 hover:bg-ink hover:text-on-dark`;
 
 function Home() {
   return (
@@ -52,31 +52,31 @@ function Hero() {
     <section className="screen-section bg-ivory-fade">
       <div className="container-x grid items-center gap-8 lg:grid-cols-12">
         <div className="lg:col-span-5">
-          <span className="eyebrow ornament">Festive Edit 2026</span>
-          <h1 className="mt-4 text-hero font-medium leading-[0.95]">
+          <span className="eyebrow ornament animate-fade-up">Festive Edit 2026</span>
+          <h1 className="mt-4 animate-fade-up delay-1 text-hero font-medium leading-[0.95]">
             Traditions,<br /><em className="text-maroon">Beautifully</em> Crafted.
           </h1>
-          <p className="mt-5 max-w-md text-base md:text-lg leading-relaxed text-muted-foreground">
+          <p className="mt-5 max-w-md animate-fade-up delay-2 text-base md:text-lg leading-relaxed text-muted-foreground">
             Discover thoughtfully curated pooja essentials, wedding collections, handcrafted treasures, and personalized gifts for every meaningful occasion.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href="/shop" className={btnPrimary}>Explore Collections <ArrowRight className="h-4 w-4" /></a>
-            <a href="#custom" className={btnOutline}>Create Something Custom</a>
+            <a href="/shop" className={`${btnPrimary} animate-fade-up delay-3`}>Explore Collections <ArrowRight className="h-4 w-4" /></a>
+            <a href="#custom" className={`${btnOutline} animate-fade-up delay-4`}>Create Something Custom</a>
           </div>
-          <div className="mt-6 hidden grid-cols-3 gap-4 border-t pt-5 sm:grid text-xs font-semibold">
+          <div className="mt-6 hidden animate-fade-up delay-4 grid-cols-3 gap-4 border-t pt-5 sm:grid text-xs font-semibold">
             {[[Sparkles, "Custom orders"], [Package, "Bulk & wholesale"], [Globe, "Worldwide enquiries"]].map(([I, t]: any) => (
               <div key={t} className="flex items-center gap-2"><I className="h-4 w-4 text-leaf" />{t}</div>
             ))}
           </div>
         </div>
         <div className="relative lg:col-span-7">
-          <div className="overflow-hidden rounded-md shadow-lift">
-            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[26svh] w-full lg:max-h-[70svh] object-cover" />
+          <div className="animate-img-reveal overflow-hidden rounded-md shadow-lift">
+            <img src={img.hero} alt="Pooja thali, kalash, wedding potli and gift boxes" width={1600} height={1200} className="aspect-[4/3] max-h-[26svh] w-full object-cover transition-transform duration-[1.2s] ease-out hover:scale-[1.03] lg:max-h-[70svh]" />
           </div>
-          <div className="absolute -bottom-6 -left-4 hidden w-[min(14rem,22svh)] overflow-hidden rounded-md border-4 border-background shadow-lift md:block">
+          <div className="absolute -bottom-6 -left-4 hidden w-[min(14rem,22svh)] animate-float overflow-hidden rounded-md border-4 border-background shadow-lift md:block">
             <img src={img.mala} alt="Elaichi mala" loading="lazy" className="aspect-square w-full object-cover" />
           </div>
-          <div className="absolute -top-4 right-6 rounded-sm bg-ember px-5 py-3 text-on-dark shadow-lift">
+          <div className="absolute -top-4 right-6 animate-float rounded-sm bg-ember [animation-delay:1.5s] px-5 py-3 text-on-dark shadow-lift">
             <div className="text-[10px] uppercase tracking-widest">Now live</div>
             <div className="font-display text-xl">Diwali Collection</div>
           </div>

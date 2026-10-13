@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: string; action?: ReactNode }) {
   return (
-    <div className="mb-[clamp(12px,3vh,36px)] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div data-reveal className="mb-[clamp(12px,3vh,36px)] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div className="max-w-2xl">
         <span className="eyebrow ornament">{eyebrow}</span>
         <h2 className="mt-2 text-section font-medium leading-[1.05]">{title}</h2>

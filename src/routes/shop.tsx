@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -15,6 +15,10 @@ export const Route = createFileRoute("/shop")({
       { property: "og:description", content: "Pooja kits, wedding essentials, malas, hampers and handcrafted pieces." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>): { q?: string; price?: number } => ({
+    q: typeof s.q === "string" && s.q ? s.q : undefined,
+    price: typeof s.price === "number" && s.price >= 0 && s.price <= 3 ? s.price : undefined,
+  }),
   component: Shop,
 });
 
@@ -22,20 +26,32 @@ const cats = Array.from(new Set(products.map((p) => p.category)));
 const occs = Array.from(new Set(products.map((p) => p.occasion)));
 const prices = [["Under ₹499", 0, 499], ["₹500–₹999", 500, 999], ["₹1,000–₹2,999", 1000, 2999], ["₹3,000+", 3000, 1e9]] as const;
 
+const stop = new Set(["kit", "kits", "products", "items", "and", "&", "ki", "ji", "for"]);
+const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !stop.has(w));
+
 function Shop() {
+  const { q, price: priceParam } = Route.useSearch();
   const [cat, setCat] = useState<string[]>([]);
   const [occ, setOcc] = useState<string[]>([]);
-  const [price, setPrice] = useState<number | null>(null);
+  const [price, setPrice] = useState<number | null>(priceParam ?? null);
+  useEffect(() => { setPrice(priceParam ?? null); }, [priceParam]);
   const [sort, setSort] = useState("featured");
   const [showF, setShowF] = useState(false);
 
+  const matched = useMemo(() => {
+    if (!q) return { items: products, related: false };
+    const ws = words(q);
+    const hits = products.filter((p) => { const hay = words(`${p.name} ${p.category} ${p.occasion}`); return ws.some((w) => hay.some((h) => h.startsWith(w.slice(0, 5)))); });
+    return hits.length ? { items: hits, related: false } : { items: products, related: true };
+  }, [q]);
+
   const list = useMemo(() => {
-    let l = products.filter((p) => (!cat.length || cat.includes(p.category)) && (!occ.length || occ.includes(p.occasion)) &&
+    let l = matched.items.filter((p) => (!cat.length || cat.includes(p.category)) && (!occ.length || occ.includes(p.occasion)) &&
       (price === null || (p.price >= prices[price]![1] && p.price <= prices[price]![2])));
     if (sort === "low") l = [...l].sort((a, b) => a.price - b.price);
     if (sort === "high") l = [...l].sort((a, b) => b.price - a.price);
     return l;
-  }, [cat, occ, price, sort]);
+  }, [matched, cat, occ, price, sort]);
 
   const toggle = (arr: string[], set: (v: string[]) => void, v: string) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
@@ -55,9 +71,9 @@ function Shop() {
       <Header />
       <section className="bg-ivory-fade border-b">
         <div className="container-x py-12">
-          <nav className="text-xs text-muted-foreground"><Link to="/" className="hover:text-maroon">Home</Link> / <span className="text-ink">Shop</span></nav>
-          <h1 className="mt-3 text-5xl font-medium md:text-6xl">All Products</h1>
-          <p className="mt-3 max-w-xl text-muted-foreground">Pooja essentials, wedding collections, malas and handcrafted pieces — curated for every occasion. Sample catalogue for this prototype.</p>
+          <nav className="text-xs text-muted-foreground"><Link to="/" className="hover:text-maroon">Home</Link> / <Link to="/shop" className="hover:text-maroon">Shop</Link>{q && <> / <span className="text-ink">{q}</span></>}</nav>
+          <h1 className="mt-3 animate-fade-up text-5xl font-medium md:text-6xl">{q ?? "All Products"}</h1>
+          <p className="mt-3 max-w-xl animate-fade-up delay-1 text-muted-foreground">{matched.related && <b className="mb-1 block text-terracotta">More {q} pieces are coming soon — here are related products.</b>}Pooja essentials, wedding collections, malas and handcrafted pieces — curated for every occasion. Sample catalogue for this prototype.</p>
         </div>
       </section>
       <div className="container-x grid gap-10 py-10 lg:grid-cols-[240px_1fr]">
@@ -89,7 +105,7 @@ function Shop() {
               <option value="high">Price: High to Low</option>
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3">
+          <div key={`${q}-${price}-${cat}-${occ}-${sort}`} data-stagger className="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3">
             {list.map((p) => <ProductCard key={p.id} p={p} />)}
           </div>
           {!list.length && <p className="py-20 text-center text-muted-foreground">No products match these filters.</p>}

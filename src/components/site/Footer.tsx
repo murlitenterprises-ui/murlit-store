@@ -1,3 +1,4 @@
+import { SeoLinks } from "./SeoLinks";
 import logoFull from "@/assets/logo-full.png";
 import { Instagram, Facebook, Youtube, Linkedin, Phone, Mail, MessageCircle } from "lucide-react";
 
@@ -10,6 +11,7 @@ const cols = [
 
 export function Footer() {
   return (
+    <>
     <footer id="contact" className="border-t bg-ivory">
       <div className="h-1 bg-ember" />
       <div className="container-x grid gap-10 py-16 md:grid-cols-2 lg:grid-cols-6">
@@ -50,5 +52,7 @@ export function Footer() {
         </div>
       </div>
     </footer>
+    <SeoLinks />
+    </>
   );
 }
