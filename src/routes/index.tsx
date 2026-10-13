@@ -250,7 +250,7 @@ function B2B() {
             <div>
               <span className="text-xs font-bold uppercase tracking-[0.25em] text-leaf">B2B / Bulk</span>
               <h2 className="mt-3 text-display font-medium leading-none">Your Trusted Partner for Bulk & Wholesale Orders.</h2>
-              <p className="mt-5 text-muted-foreground">Thoughtfully curated products for retailers, wedding planners, event organizers, temples, resellers, and corporate gifting.</p>
+              <p className="mt-3 text-sm text-muted-foreground md:text-base">Thoughtfully curated products for retailers, wedding planners, event organizers, temples, resellers, and corporate gifting.</p>
               <div className="mt-4 flex flex-wrap gap-1.5 md:mt-6 md:grid md:grid-cols-2 md:gap-2">
                 {feats.map((f) => <div key={f} className="flex items-center gap-2 rounded-sm bg-background px-2 py-1 text-[11px] font-semibold md:p-2.5 md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
               </div>
