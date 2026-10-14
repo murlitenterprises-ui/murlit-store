@@ -6,7 +6,7 @@ export function SectionHead({ eyebrow, title, sub, action }: { eyebrow: string; 
       <div className="max-w-2xl">
         <span className="eyebrow ornament">{eyebrow}</span>
         <h2 className="mt-2 text-section font-medium leading-[1.05]">{title}</h2>
-        {sub && <p className="mt-2 text-muted-foreground">{sub}</p>}
+        {sub && <p className="mt-2 text-[18px] text-muted-foreground">{sub}</p>}
       </div>
       {action}
     </div>

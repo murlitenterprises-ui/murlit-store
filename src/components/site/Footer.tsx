@@ -16,7 +16,7 @@ export function Footer() {
       <div className="h-1 bg-ember" />
       <div className="container-x grid gap-10 py-16 md:grid-cols-2 lg:grid-cols-6">
         <div className="lg:col-span-2">
-          <img src={logoFull} alt="Murlit Enterprises — Tradition, Quality & Spirituality" width={1174} height={940} loading="lazy" className="h-[120px] w-auto object-contain" />
+          <img src={logoFull} alt="Murlit Enterprises — Tradition, Quality & Spirituality" width={1174} height={940} loading="lazy" decoding="async" className="h-[120px] w-auto object-contain" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
             Pooja samagri, wedding essentials, handcrafted treasures and personalised gifts — curated for every meaningful occasion.
           </p>

@@ -85,8 +85,8 @@
 
 @layer base {
   * { border-color: var(--color-border); }
-  :root { --header-h: 64px; }
-  @media (min-width: 1024px) { :root { --header-h: 108px; } }
+  :root { --header-h: 64px; --carousel-h: 0px; }
+  @media (min-width: 1024px) { :root { --header-h: 138px; --carousel-h: 105px; } }
   :focus-visible { outline: 2px solid var(--maroon); outline-offset: 2px; }
   html { scroll-behavior: smooth; scroll-padding-top: var(--header-h); scroll-snap-type: y proximity; overflow-x: hidden; }
   body { overflow-x: hidden; }
@@ -108,7 +108,7 @@
 @utility shadow-lift { box-shadow: var(--shadow-lift); }
 @utility eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.7rem;
+  font-size: 0.875rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   font-weight: 700;
@@ -124,17 +124,52 @@
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @utility animate-marquee { animation: marquee 40s linear infinite; }
 
+@keyframes occasions-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@utility animate-occasions-marquee { animation: occasions-marquee 45s linear infinite; }
+
 @utility screen-section {
   min-height: calc(100svh - var(--header-h));
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding-block: clamp(24px, 4vh, 48px);
+  padding-block: clamp(12px, 2vh, 36px);
   scroll-snap-align: start;
+  @media (min-width: 1024px) {
+    height: calc(100svh - var(--header-h));
+    max-height: calc(100svh - var(--header-h));
+    overflow: hidden;
+  }
+}
+@utility hero-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  scroll-snap-align: start;
+  padding-block: clamp(16px, 4vh, 48px);
+  /* Mobile: proportional to viewport, independent of header size */
+  height: clamp(420px, 76svh, 660px);
+  @media (min-width: 1024px) {
+    /* Desktop: 134px full header + 130px category strip = 264px static top bars */
+    height: clamp(320px, calc(100svh - 264px), 720px);
+  }
+}
+@utility hero-gap {
+  margin-top: clamp(8px, 2vh, 24px);
+  @media (max-height: 700px) { margin-top: clamp(5px, 1.5vh, 12px); }
+}
+@utility hero-para {
+  font-size: clamp(0.9rem, 1.9vh, 1.15rem);
+  line-height: 1.45;
+  @media (max-height: 700px) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 @utility text-hero { font-size: clamp(2.75rem, min(7vw, 9svh), 6.5rem); }
-@utility text-display { font-size: clamp(2rem, min(4.2vw, 6svh), 3.75rem); }
-@utility text-section { font-size: clamp(1.85rem, min(3.4vw, 5svh), 3rem); }
+@utility text-display { font-size: clamp(2.25rem, 3.2vw, 3.25rem); }
+@utility text-section { font-size: clamp(2.25rem, 3.2vw, 3.25rem); }
 
 /* ---------- Motion system ---------- */
 @keyframes fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
@@ -194,3 +229,7 @@
   .reveal-on [data-reveal], .reveal-on [data-stagger] > * { opacity: 1 !important; transform: none !important; }
   .parallax-img { animation: none !important; }
 }
+
+/* view-transition names — animations are defined in __root.tsx to bypass Lightning CSS */
+[data-site-header]    { view-transition-name: site-header; }
+[data-category-strip] { view-transition-name: category-strip; }
