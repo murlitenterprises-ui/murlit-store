@@ -176,6 +176,8 @@
 @keyframes img-reveal { from { opacity: 0; transform: scale(1.06); clip-path: inset(6% 6% 6% 6% round 6px); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0 round 6px); } }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes drawer-item-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes drawer-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes parallax-y { from { transform: translateY(-6%) scale(1.12); } to { transform: translateY(6%) scale(1.12); } }
 
 @utility animate-fade-up { animation: fade-up .8s cubic-bezier(.2,.7,.2,1) both; }

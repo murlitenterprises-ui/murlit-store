@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from "lucide-react";
+import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { img } from "@/lib/catalog";
@@ -268,47 +268,172 @@ export function Header() {
 
     </header>
 
-    {/* Mobile drawer — rendered into document.body via portal so it escapes the header's stacking context */}
+    {/* Mobile drawer — portal into document.body to escape header stacking context */}
     {mounted && mobile && createPortal(
       <div className="lg:hidden">
         {/* Backdrop */}
         <div
           aria-hidden="true"
-          style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.45)", viewTransitionName: "none" }}
           onClick={() => setMobile(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", viewTransitionName: "none", animation: "drawer-backdrop-in 200ms ease both" }}
         />
+
         {/* Drawer panel */}
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Navigation menu"
-          style={{ position: "fixed", left: 0, top: 0, height: "100dvh", width: "min(88vw, 380px)", zIndex: 1000, overflowY: "auto", overscrollBehavior: "contain", viewTransitionName: "none" }}
-          className="bg-background p-5 animate-drawer-in"
+          role="dialog" aria-modal="true" aria-label="Navigation menu"
           onClick={(e) => e.stopPropagation()}
+          style={{ position: "fixed", left: 0, top: 0, height: "100dvh", width: "min(90vw,400px)", zIndex: 1000, display: "flex", flexDirection: "column", overscrollBehavior: "contain", viewTransitionName: "none" }}
+          className="animate-drawer-in bg-background"
         >
-          <div className="mb-5 flex items-center justify-between">
-            <img src={logoCompact} alt="Murlit Enterprises" className="h-10 w-auto object-contain" />
-            <button aria-label="Close menu" onClick={() => setMobile(false)}><X className="h-6 w-6" /></button>
-          </div>
-          <input placeholder="Search kits, mala, potli..." className="mb-4 w-full rounded-full border bg-sage px-4 py-2.5 text-sm" />
-          {nav.map((n) => (
-            <div key={n.label} className="border-b">
-              <button className={`flex w-full items-center justify-between py-3.5 text-left font-semibold ${n.emph ? "text-terracotta" : ""}`}
-                onClick={() => n.mega ? setMExp(mExp === n.label ? null : n.label) : (window.location.href = n.href)}>
-                {n.label}{n.mega && <ChevronDown className={`h-4 w-4 transition ${mExp === n.label ? "rotate-180" : ""}`} />}
+          {/* ── 1. TOP BAND ── */}
+          <div style={{ background: "var(--maroon)", padding: "18px 18px 14px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <img src={logoCompact} alt="Murlit Enterprises" style={{ height: 34, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
+                <p style={{ color: "var(--on-dark)", fontSize: 10, fontStyle: "italic", opacity: 0.75, marginTop: 4 }} className="font-display">
+                  Traditions, Beautifully Crafted
+                </p>
+              </div>
+              <button aria-label="Close menu" onClick={() => setMobile(false)}
+                style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,240,0.18)", border: "none", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--on-dark)", flexShrink: 0 }}>
+                <X style={{ width: 18, height: 18 }} />
               </button>
-              {mExp === n.label && (
-                <ul className="animate-menu-in space-y-2 pb-3 pl-3 text-sm text-muted-foreground">
-                  {n.mega === "pooja"
-                    ? shopMenuColumns[0].links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setMobile(false)} className="hover:text-maroon">{l.label}</a></li>)
-                    : n.mega === "crochet"
-                      ? shopMenuColumns[4].links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setMobile(false)} className="hover:text-maroon">{l.label}</a></li>)
-                      : (n.mega === "shop" ? shopMenuColumns : weddingMenuColumns).map((c) => <li key={c.title}><a href="/shop" onClick={() => setMobile(false)} className="hover:text-maroon">{c.title}</a></li>)
-                  }
-                </ul>
-              )}
             </div>
-          ))}
+            {/* Search */}
+            <div style={{ position: "relative", marginTop: 12 }}>
+              <Search style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", width: 14, height: 14, color: "rgba(255,255,240,0.55)", pointerEvents: "none" }} />
+              <input placeholder="Search kits, mala, potli…"
+                style={{ width: "100%", borderRadius: 100, background: "rgba(255,255,240,0.13)", border: "1px solid rgba(255,255,240,0.28)", color: "var(--on-dark)", padding: "8px 14px 8px 36px", fontSize: 13, outline: "none" }} />
+            </div>
+          </div>
+
+          {/* ── 2 & 3. SCROLLABLE CONTENT ── */}
+          <div style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain" }}>
+
+            {/* Home row */}
+            <a href="/" onClick={() => setMobile(false)}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderBottom: "1px solid rgba(184,145,63,0.15)", textDecoration: "none", color: "inherit", animation: "drawer-item-in 280ms 40ms both" }}>
+              <img src={img.hero} alt="" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              <span className="font-display" style={{ fontSize: 17 }}>Home</span>
+            </a>
+
+            {/* Expandable categories */}
+            {(
+              [
+                { label: "Shop",             mega: "shop",    rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
+                { label: "Wedding",          mega: "wedding", rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
+                { label: "Pooja & Rituals",  mega: "pooja",   rowImg: shopMenuColumns[0].img, href: "/category/pooja-rituals",  viewAll: "/category/pooja-rituals" },
+                { label: "Handcrafted",      mega: "crochet", rowImg: shopMenuColumns[4].img, href: "/category/crochet",        viewAll: "/category/crochet" },
+              ] as const
+            ).map((n, idx) => {
+              const isOpen = mExp === n.label;
+
+              // Build sub-item grid data
+              type Sub = { label: string; img: string; href: string };
+              let subs: Sub[] = [];
+              if (n.mega === "shop") {
+                subs = shopMenuColumns.slice(0, 5).map((c) => ({ label: c.title, img: c.img, href: c.slug ? `/category/${c.slug}` : "/shop" }));
+              } else if (n.mega === "wedding") {
+                subs = weddingMenuColumns.slice(0, 9).map((c) => ({ label: c.title, img: c.img, href: c.links[0]?.href ?? "/shop" }));
+              } else if (n.mega === "pooja") {
+                subs = shopMenuColumns[0].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
+              } else {
+                subs = shopMenuColumns[4].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
+              }
+
+              return (
+                <div key={n.label} style={{ borderBottom: "1px solid rgba(184,145,63,0.15)", animation: `drawer-item-in 280ms ${(idx + 1) * 50 + 40}ms both` }}>
+                  {/* Row button */}
+                  <button
+                    onClick={() => setMExp(isOpen ? null : n.label)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", width: "100%", background: isOpen ? "rgba(145,30,31,0.04)" : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+                    <img src={n.rowImg} alt="" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    <span className="font-display" style={{ fontSize: 17, flex: 1 }}>{n.label}</span>
+                    <ChevronDown style={{ width: 18, height: 18, flexShrink: 0, color: "var(--gold)", transition: "transform 300ms ease", transform: isOpen ? "rotate(180deg)" : "rotate(0)" }} />
+                  </button>
+
+                  {/* Smooth height expand via CSS grid trick */}
+                  <div style={{ display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows 300ms cubic-bezier(.4,0,.2,1)" }}>
+                    <div style={{ overflow: "hidden" }}>
+                      <div style={{ padding: "10px 14px 6px", background: "var(--sage)" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                          {subs.map((sub) => (
+                            <a key={sub.label} href={sub.href} onClick={() => setMobile(false)}
+                              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "8px 4px", textDecoration: "none", color: "inherit" }}>
+                              <img src={sub.img} alt="" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", flexShrink: 0 }} />
+                              <span style={{ fontSize: 11, textAlign: "center", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{sub.label}</span>
+                            </a>
+                          ))}
+                        </div>
+                        <a href={n.viewAll} onClick={() => setMobile(false)}
+                          style={{ display: "block", textAlign: "right", padding: "8px 4px 2px", fontSize: 12, fontWeight: 700, color: "var(--terracotta)", textDecoration: "none" }}>
+                          View all →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* ── 4. HIGHLIGHT CARDS ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "14px 18px", animation: "drawer-item-in 280ms 290ms both" }}>
+              <a href="/#custom" onClick={() => setMobile(false)}
+                style={{ border: "1.5px solid var(--gold)", borderRadius: 8, padding: 10, background: "var(--ivory)", textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", gap: 6 }}>
+                <img src={img.crochet} alt="" style={{ width: "100%", height: 64, objectFit: "cover", borderRadius: 5 }} />
+                <span className="font-display" style={{ fontSize: 14, fontWeight: 600 }}>Customized</span>
+                <span style={{ fontSize: 10, color: "#888" }}>Made just for you</span>
+              </a>
+              <a href="/#b2b" onClick={() => setMobile(false)}
+                style={{ borderRadius: 8, padding: 10, background: "var(--maroon)", textDecoration: "none", color: "var(--on-dark)", display: "flex", flexDirection: "column", gap: 6 }}>
+                <img src={img.hamper} alt="" style={{ width: "100%", height: 64, objectFit: "cover", borderRadius: 5 }} />
+                <span className="font-display" style={{ fontSize: 14, fontWeight: 600 }}>B2B / Bulk</span>
+                <span style={{ fontSize: 10, opacity: 0.78 }}>Wholesale & corporate</span>
+              </a>
+            </div>
+
+            {/* ── 5. SECONDARY LINKS ── */}
+            <div style={{ display: "flex", gap: 20, padding: "2px 18px 16px", animation: "drawer-item-in 280ms 330ms both" }}>
+              <a href="/#story" onClick={() => setMobile(false)} style={{ fontSize: 13, color: "#888", textDecoration: "none" }}>About</a>
+              <a href="/#contact" onClick={() => setMobile(false)} style={{ fontSize: 13, color: "#888", textDecoration: "none" }}>Contact</a>
+            </div>
+          </div>
+
+          {/* ── 6. BOTTOM BAR ── */}
+          <div style={{ borderTop: "1px solid rgba(184,145,63,0.18)", background: "var(--background)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
+            {/* Currency / Language selectors */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 18px 2px", fontSize: 11 }}>
+              <select aria-label="Currency" style={{ background: "transparent", border: "none", fontSize: 11, fontWeight: 600, outline: "none", cursor: "pointer" }}>
+                <option>INR ₹</option><option>USD $</option><option>GBP £</option>
+              </select>
+              <span style={{ color: "rgba(0,0,0,0.2)" }}>|</span>
+              <select aria-label="Language" style={{ background: "transparent", border: "none", fontSize: 11, fontWeight: 600, outline: "none", cursor: "pointer" }}>
+                <option>English</option><option>हिन्दी</option>
+              </select>
+            </div>
+            {/* Icons + WhatsApp */}
+            <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 10px" }}>
+              {[
+                { Icon: User,        label: "Account"  },
+                { Icon: Heart,       label: "Wishlist" },
+                { Icon: ShoppingBag, label: "Cart",    badge: "2" },
+              ].map(({ Icon, label, badge }) => (
+                <button key={label} aria-label={label}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                  <Icon style={{ width: 20, height: 20 }} />
+                  {badge && (
+                    <span style={{ position: "absolute", top: 0, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--terracotta)", color: "var(--on-dark)", fontSize: 8, display: "grid", placeItems: "center", fontWeight: 700 }}>{badge}</span>
+                  )}
+                  <span style={{ fontSize: 9 }}>{label}</span>
+                </button>
+              ))}
+              <a href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer"
+                style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#25D366", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
+                <MessageCircle style={{ width: 15, height: 15 }} />
+                WhatsApp us
+              </a>
+            </div>
+          </div>
         </div>
       </div>,
       document.body
