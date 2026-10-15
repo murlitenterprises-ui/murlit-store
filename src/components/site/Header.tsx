@@ -1,10 +1,13 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
 import logoCompact from "@/assets/logo-compact.png";
+import { searchProducts } from "@/fns/catalog";
+import { inrFromPaise } from "@/lib/format";
+import type { ProductRow } from "@/lib/catalog-types";
 
 const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide Shipping", "Diwali Special Collection Live", "WhatsApp Business Enquiries"];
 
@@ -29,9 +32,36 @@ export function Header() {
   const [hidden, setHidden] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState<ProductRow[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
   const headerRef = useRef<HTMLElement>(null);
   const busy = useRef(false);
   busy.current = !!open || mobile;
+
+  const handleSearchChange = useCallback((q: string) => {
+    setSearchQ(q);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    if (!q.trim()) { setSearchResults([]); setSearchOpen(false); return; }
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const results = await searchProducts({ data: { q: q.trim(), limit: 8 } });
+        setSearchResults(results);
+        setSearchOpen(results.length > 0);
+      } catch { /* ignore */ }
+    }, 300);
+  }, []);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searchQ.trim()) {
+      setSearchOpen(false);
+      navigate({ to: "/shop", search: { q: searchQ.trim() } as any });
+    }
+    if (e.key === "Escape") { setSearchOpen(false); setSearchQ(""); }
+  };
 
   // SSR safety: portal only available after mount
   useEffect(() => { setMounted(true); }, []);
@@ -110,11 +140,40 @@ export function Header() {
           <Link to="/" aria-label="Murlit Enterprises — Home" className="shrink-0">
             <img src={logoCompact} alt="Murlit Enterprises" width={1174} height={829} className={`w-auto object-contain transition-all duration-300 ${scrolled ? "h-8 lg:h-9" : "h-10 lg:h-12"}`} />
           </Link>
-          <label className="relative hidden flex-1 md:block">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input placeholder="Search kits, mala, potli, wedding items..."
-              className="w-full rounded-full border bg-sage py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background" />
-          </label>
+          <div ref={searchRef} className="relative hidden flex-1 md:block">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={searchQ}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              placeholder="Search kits, mala, potli, wedding items..."
+              className="w-full rounded-full border bg-sage py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background"
+            />
+            {searchOpen && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-background shadow-lift">
+                {searchResults.map((r) => (
+                  <Link
+                    key={r.id}
+                    to="/product/$slug"
+                    params={{ slug: r.slug }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setSearchOpen(false); setSearchQ(""); }}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-sage"
+                  >
+                    {r.imageUrl && (
+                      <img src={r.imageUrl} alt="" className="h-10 w-10 rounded-sm object-cover shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{r.name}</div>
+                      <div className="text-xs text-muted-foreground">{inrFromPaise(r.price)}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="ml-auto flex items-center gap-1 md:gap-3">
             <select aria-label="Currency" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
               <option>INR ₹</option><option>USD $</option><option>GBP £</option><option>EUR €</option><option>AED</option>

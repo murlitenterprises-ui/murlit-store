@@ -31,10 +31,17 @@
 - `.env.example` with `DATABASE_URL=`
 - `docs/BACKEND_PLAN.md` (this file)
 
-### Phase 2 — Frontend reads from DB
-- Shop page, category pages, product detail page read products/categories from Neon via server functions
-- Search, filters (category, price, GST rate), sorting (price asc/desc, newest, popularity)
-- Replace hardcoded `catalog.ts` / `menu.ts` data with DB queries
+### ✅ Phase 2 — Frontend reads from DB (done)
+- Shop page, category pages, and product detail page read products/categories from Neon via server functions
+- Search (header dropdown + shop page), filters (category, price, in-stock), sorting (featured/newest/price/name)
+- `src/server/queries/catalog.ts` — Drizzle query functions
+- `src/server/functions/catalog.ts` — TanStack Start `createServerFn` wrappers
+- `src/lib/format.ts` — `inrFromPaise`, `discountPct`
+- `src/server/db/update-images.ts` — one-off idempotent script to set /images/*.jpg URLs on DB rows
+- Product images copied to `public/images/`
+- `src/routes/product.$slug.tsx` — new product detail page with gallery, tabs, related products
+- ProductCard updated to DB shape with `/product/$slug` links
+- Note: Occasions section still uses static data (DB table to be added in a future phase).
 
 ### Phase 3 — Auth
 - Better Auth: email/password + Google OAuth

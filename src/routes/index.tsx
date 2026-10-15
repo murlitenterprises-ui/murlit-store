@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, Truck, Package, Globe, MessageCircle, ArrowRight, Check, Quote } from "lucide-react";
 import { Header } from "@/components/site/Header";
@@ -6,9 +6,17 @@ import { CategoryCarousel } from "@/components/site/CategoryCarousel";
 import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { SectionHead, TextLink } from "@/components/site/Section";
-import { categories, img, occasions, products } from "@/lib/catalog";
+import { img, occasions } from "@/lib/catalog";
+import { listProducts, getNavCategories } from "@/fns/catalog";
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    const [featured, navCategories] = await Promise.all([
+      listProducts({ data: { featured: true, pageSize: 8 } }),
+      getNavCategories({ data: {} }),
+    ]);
+    return { featured: featured.items, navCategories };
+  },
   head: () => ({
     meta: [
       { title: "Murlit Enterprises — Pooja, Wedding & Handcrafted Gifts" },
@@ -25,6 +33,7 @@ const btnPrimary = `${btn} press bg-royal text-on-dark shadow-lift hover:-transl
 const btnOutline = `${btn} press border border-ink/80 hover:-translate-y-0.5 hover:bg-ink hover:text-on-dark`;
 
 function Home() {
+  const { featured, navCategories } = Route.useLoaderData();
   return (
     <div className="min-h-screen">
       <Header />
@@ -32,12 +41,12 @@ function Home() {
       <main>
         <Hero />
         <Occasions />
-        <Categories />
-        <BestSellers />
+        <Categories navCategories={navCategories} />
+        <BestSellers featured={featured} />
         <ShopByNeed />
         <Custom />
         <WeddingSpot />
-        <Handcrafted />
+        <Handcrafted featured={featured} />
         <B2B />
         <Budget />
         <Recipient />
@@ -229,14 +238,30 @@ function Occasions() {
   );
 }
 
-function Categories() {
+function Categories({ navCategories }: { navCategories: import("@/lib/catalog-types").CategoryTree[] }) {
+  const staticExtra = [
+    { name: "Customized", img: img.crochet, href: "/#custom" },
+    { name: "Bulk Orders", img: img.hamper, href: "/#b2b" },
+  ];
   return (
     <section className="py-10 md:py-12 lg:py-16 bg-sage">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Category" title="Curated with devotion" />
         <div className="grid grid-cols-3 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6 lg:gap-5">
-          {categories.map((c) => (
-            <a key={c.name} href="/shop" className="group text-center">
+          {navCategories.map((c) => (
+            <Link key={c.slug} to="/category/$slug" params={{ slug: c.slug }} className="group text-center">
+              <div className="mx-auto h-[110px] w-[110px] lg:h-[170px] lg:w-[170px] overflow-hidden rounded-full border-4 border-background shadow-soft">
+                {c.image ? (
+                  <img src={c.image} alt={c.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-110" />
+                ) : (
+                  <div className="h-full w-full bg-sage-deep" />
+                )}
+              </div>
+              <div className="mt-3 text-[17px] font-medium leading-snug group-hover:text-maroon">{c.name}</div>
+            </Link>
+          ))}
+          {staticExtra.map((c) => (
+            <a key={c.name} href={c.href} className="group text-center">
               <div className="mx-auto h-[110px] w-[110px] lg:h-[170px] lg:w-[170px] overflow-hidden rounded-full border-4 border-background shadow-soft">
                 <img src={c.img} alt={c.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-110" />
               </div>
@@ -249,13 +274,13 @@ function Categories() {
   );
 }
 
-function BestSellers() {
+function BestSellers({ featured }: { featured: import("@/lib/catalog-types").ProductRow[] }) {
   return (
     <section className="py-10 md:py-12 lg:py-16">
       <div className="container-x">
-        <SectionHead eyebrow="Best Sellers" title="Featured collections" sub="Sample products and prices for this prototype." action={<TextLink>View all products</TextLink>} />
+        <SectionHead eyebrow="Best Sellers" title="Featured collections" action={<TextLink>View all products</TextLink>} />
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {products.slice(0, 8).map((p) => <ProductCard key={p.id} p={p} />)}
+          {featured.map((p) => <ProductCard key={p.id} p={p} />)}
         </div>
       </div>
     </section>
@@ -340,8 +365,9 @@ function WeddingSpot() {
   );
 }
 
-function Handcrafted() {
+function Handcrafted({ featured }: { featured: import("@/lib/catalog-types").ProductRow[] }) {
   const items = ["Crochet Jewellery", "Crochet Varmala", "Handmade Bags", "Keychains", "Table Tops", "Handmade Décor", "Crochet Flowers", "One-of-a-kind Pieces"];
+  const showcase = featured[0];
   return (
     <section id="handcrafted" className="py-10 md:py-12 lg:py-16 bg-ivory">
       <div className="container-x grid gap-8 lg:grid-cols-5">
@@ -355,7 +381,7 @@ function Handcrafted() {
         </div>
         <div className="grid grid-cols-2 gap-4 lg:col-span-3">
           <img src={img.crochet} alt="Crochet varmala and flowers" loading="lazy" decoding="async" className="aspect-[4/5] w-full rounded-md object-cover" />
-          <ProductCard p={products[9]!} />
+          {showcase && <ProductCard p={showcase} />}
         </div>
       </div>
     </section>
