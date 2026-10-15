@@ -43,11 +43,22 @@
 - ProductCard updated to DB shape with `/product/$slug` links
 - Note: Occasions section still uses static data (DB table to be added in a future phase).
 
-### Phase 3 — Auth
-- Better Auth: email/password + Google OAuth
-- `/account` page for customers
-- Admin role guard middleware
-- Session management (Better Auth Drizzle adapter)
+### ✅ Phase 3 — Auth (done)
+- Better Auth 1.7.7: email/password + Google OAuth (Google conditional on env vars)
+- Schema: `role` changed from pgEnum to text for BA adapter compat; `phone` column added to users; migration applied
+- `src/server/auth.ts` — Better Auth instance with Drizzle adapter, rate limiting, cookie prefix
+- `src/routes/api/auth/$.ts` — catch-all API route for Better Auth
+- `src/lib/auth-client.ts` — Better Auth React client with `signIn`, `signUp`, `signOut`, `useSession`
+- `src/server/auth-helpers.ts` — `getSessionUser`, `requireUser`, `requireAdmin` server-only helpers
+- `src/fns/auth.ts` — `getCurrentUser` server function for use in route loaders
+- Auth pages: `/login`, `/signup`, `/forgot-password`, `/reset-password`
+- `/account` page — tabs: Profile, Addresses, My Orders, Wishlist, Security
+- `src/fns/addresses.ts` — server functions: listAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress
+- `src/lib/india-states.ts` — all 28 states + UTs with 2-letter codes
+- `/admin` page — role guard (non-admin redirected to /)
+- Header updated: auth-aware user menu, DB nav categories with static fallback
+- `src/server/db/make-admin.ts` — CLI script to promote a user to admin
+- `make-admin` npm script added to package.json
 
 ### Phase 4 — Admin Panel (`/admin`, admin-only)
 - Dashboard (order counts, revenue)

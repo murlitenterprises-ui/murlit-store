@@ -8,6 +8,13 @@
       "when": 1792061018724,
       "tag": "0000_secret_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792062719160,
+      "tag": "0001_far_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

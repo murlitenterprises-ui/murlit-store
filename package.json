@@ -15,13 +15,14 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "node --env-file=.env -e \"import('./src/server/db/seed.ts').then(m=>m.seed()).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
+    "db:seed": "node --env-file=.env -e \"import('./src/server/db/seed.ts').then(m=>m.seed()).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
+    "make-admin": "bun src/server/db/make-admin.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
+    "@hookform/resolvers": "^5.9.1",
     "@neondatabase/serverless": "^1.2.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -54,6 +55,7 @@
     "@tanstack/react-router": "1.170.41",
     "@tanstack/react-start": "1.168.60",
     "@tanstack/router-plugin": "1.168.42",
+    "better-auth": "^1.7.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -65,7 +67,7 @@
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
-    "react-hook-form": "^7.71.2",
+    "react-hook-form": "^7.90.0",
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
@@ -74,7 +76,7 @@
     "tw-animate-css": "^1.3.4",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

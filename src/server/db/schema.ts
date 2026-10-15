@@ -109,7 +109,9 @@ export const users = pgTable("users", {
   email:         text("email").notNull(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image:         text("image"),
-  role:          userRoleEnum("role").notNull().default("customer"),
+  // Use text (not pgEnum) so Better Auth's Drizzle adapter can read/write it without enum casting issues
+  role:          text("role").notNull().default("customer"),
+  phone:         text("phone"),
   ...timestamps,
 }, (t) => [
   uniqueIndex("users_email_idx").on(t.email),
