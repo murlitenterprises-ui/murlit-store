@@ -289,7 +289,9 @@ export function Header() {
           <div style={{ background: "var(--maroon)", padding: "18px 18px 14px", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <img src={logoCompact} alt="Murlit Enterprises" style={{ height: 34, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
+                <div style={{ background: "var(--ivory)", borderRadius: 12, padding: "6px 12px", boxShadow: "0 2px 8px rgba(0,0,0,0.18)", display: "inline-flex" }}>
+                  <img src={logoCompact} alt="Murlit Enterprises" style={{ height: 40, width: "auto", objectFit: "contain" }} />
+                </div>
                 <p style={{ color: "var(--on-dark)", fontSize: 10, fontStyle: "italic", opacity: 0.75, marginTop: 4 }} className="font-display">
                   Traditions, Beautifully Crafted
                 </p>
