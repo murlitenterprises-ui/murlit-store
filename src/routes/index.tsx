@@ -56,6 +56,7 @@ function Hero() {
   // Only true on a REAL unrecoverable error (MEDIA_ERR_NETWORK=2, MEDIA_ERR_DECODE=3, MEDIA_ERR_SRC_NOT_SUPPORTED=4).
   // MEDIA_ERR_ABORTED=1 fires when the browser navigates/aborts, NOT a real failure — ignored.
   const [videoFailed, setVideoFailed] = useState(false);
+  const [videoVisible, setVideoVisible] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -118,22 +119,24 @@ function Hero() {
         preload="auto"
         poster="/videos/hero-poster.jpg"
         aria-hidden="true"
+        style={{ transition: "opacity 800ms ease", opacity: videoVisible ? 1 : 0 }}
         className={`absolute inset-0 h-full w-full object-cover object-center motion-reduce:hidden${videoFailed ? " hidden" : ""}`}
         onError={handleVideoError}
+        onPlaying={() => setVideoVisible(true)}
       >
         <source src="/videos/hero-mobile.mp4" type="video/mp4" media="(max-width: 767px)" />
         <source src="/videos/hero.mp4" type="video/mp4" />
       </video>
 
-      {/* Overlays — lighter than static image since video is already dark */}
-      {/* Mobile: soft uniform tint */}
-      <div className="absolute inset-0 lg:hidden" style={{ background: "rgba(30,10,5,0.30)" }} />
-      {/* Desktop: gentle radial fade */}
-      <div className="absolute inset-0 hidden lg:block" style={{ background: "radial-gradient(ellipse at 50% 46%, rgba(30,10,5,0.22) 0%, rgba(30,10,5,0.06) 100%)" }} />
-      {/* Text-backing: focused ellipse behind the copy for readability */}
-      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 60% 55% at 50% 40%, rgba(20,8,4,0.40) 0%, transparent 100%)" }} />
-      {/* Bottom fade — keeps lower text readable */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(20,8,4,0.45) 0%, transparent 32%)" }} />
+      {/* Overlays */}
+      {/* Mobile: uniform dark tint */}
+      <div className="absolute inset-0 lg:hidden" style={{ background: "rgba(15,5,2,0.42)" }} />
+      {/* Desktop: left-heavy navy gradient so text stays readable while right shows video */}
+      <div className="absolute inset-0 hidden lg:block" style={{ background: "linear-gradient(to right, rgba(10,5,20,0.72) 0%, rgba(10,5,20,0.40) 45%, rgba(10,5,20,0.10) 100%)" }} />
+      {/* Text-backing: focused ellipse behind the copy */}
+      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 65% 60% at 50% 40%, rgba(10,5,20,0.48) 0%, transparent 100%)" }} />
+      {/* Bottom fade */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,5,20,0.55) 0%, transparent 35%)" }} />
 
       {/* Centered content */}
       <div className="container-x relative z-10 flex flex-col items-center text-center">
