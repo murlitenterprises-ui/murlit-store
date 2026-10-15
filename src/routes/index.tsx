@@ -275,12 +275,12 @@ function ShopByNeed() {
     <section className="py-10 md:py-12 lg:py-16 bg-sage-fade">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Need" title="Whoever you're shopping for" sub="From one family celebration to five hundred hampers." />
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 md:gap-4 lg:grid-cols-3">
           {needs.map((n, i) => (
             <a key={n} href="/shop" className="group flex items-center gap-3 rounded-md border bg-background p-3 md:gap-5 md:p-4 transition hover:border-maroon hover:shadow-soft">
-              <img src={needImgs[i]} alt="" loading="lazy" decoding="async" className="h-24 w-24 shrink-0 rounded-sm object-cover" />
-              <span className="font-display text-[22px] leading-tight">{n}</span>
-              <ArrowRight className="ml-auto hidden h-5 w-5 md:block text-muted-foreground transition group-hover:translate-x-1 group-hover:text-maroon" />
+              <img src={needImgs[i]} alt="" loading="lazy" decoding="async" className="h-16 w-16 shrink-0 rounded-sm object-cover md:h-24 md:w-24" />
+              <span className="min-w-0 break-words font-display text-[18px] leading-tight md:text-[22px]">{n}</span>
+              <ArrowRight className="ml-auto hidden h-5 w-5 shrink-0 md:block text-muted-foreground transition group-hover:translate-x-1 group-hover:text-maroon" />
             </a>
           ))}
         </div>
@@ -377,33 +377,43 @@ function B2B() {
           <div className="grid gap-5 md:gap-8 lg:grid-cols-2">
             <div>
               <span className="text-[14px] font-bold uppercase tracking-[0.25em] text-leaf">B2B / Bulk</span>
-              <h2 className="mt-3 text-display font-medium leading-none">Your Trusted Partner for Bulk & Wholesale Orders.</h2>
+              <h2 className="mt-3 font-display font-medium leading-tight text-[clamp(1.5rem,5vw,2.5rem)]">Your Trusted Partner for Bulk & Wholesale Orders.</h2>
               <p className="mt-3 text-[18px] text-muted-foreground leading-relaxed">Thoughtfully curated products for retailers, wedding planners, event organizers, temples, resellers, and corporate gifting.</p>
-              <div className="no-scrollbar -mx-5 mt-4 flex gap-1.5 overflow-x-auto px-5 md:mx-0 md:mt-6 md:px-0 md:overflow-visible md:grid md:grid-cols-2 md:gap-2">
-                {feats.map((f) => <div key={f} className="flex items-center gap-2 shrink-0 rounded-sm bg-background px-2 py-1 text-[11px] font-semibold md:p-2.5 md:text-sm"><Check className="h-4 w-4 text-leaf" />{f}</div>)}
+              <div className="mt-4 grid grid-cols-1 gap-1.5 min-[400px]:grid-cols-2 md:mt-6 md:gap-2">
+                {feats.map((f) => <div key={f} className="flex items-center gap-2 rounded-sm bg-background p-2 text-sm font-semibold"><Check className="h-4 w-4 shrink-0 text-leaf" /><span className="min-w-0">{f}</span></div>)}
               </div>
             </div>
             <div className="flex flex-col">
               <div className="overflow-hidden rounded-md border bg-background">
-                <div className="flex items-center justify-between bg-leafy px-5 py-3 text-on-dark">
-                  <span className="font-semibold">Designer Wedding Potli — tier pricing</span>
-                  <span className="rounded-sm bg-on-dark/20 px-2 py-0.5 text-[10px] uppercase tracking-widest">Sample UI data</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-leafy px-4 py-3 text-on-dark">
+                  <span className="font-semibold text-sm">Designer Wedding Potli — tier pricing</span>
+                  <span className="rounded-sm bg-on-dark/20 px-2 py-0.5 text-[10px] uppercase tracking-widest shrink-0">Sample UI data</span>
                 </div>
-                <table className="w-full text-sm">
+                {/* Mobile: vertical card list. md+: table */}
+                <div className="md:hidden divide-y">
+                  {tiers.map(([q, p, s]) => (
+                    <div key={q} className="flex items-center justify-between px-4 py-3 text-sm">
+                      <span className="font-semibold">{q}</span>
+                      <span className="font-bold text-maroon">{p}</span>
+                      <span className="text-leaf">{s} off</span>
+                    </div>
+                  ))}
+                </div>
+                <table className="hidden md:table w-full text-sm">
                   <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <tr><th className="px-5 py-3">Quantity</th><th>Per unit</th><th>Saving</th></tr>
                   </thead>
                   <tbody>
                     {tiers.map(([q, p, s]) => (
-                      <tr key={q} className="border-t"><td className="px-5 py-2 font-semibold md:py-3">{q}</td><td className="font-bold text-maroon">{p}</td><td className="text-leaf">{s}</td></tr>
+                      <tr key={q} className="border-t"><td className="px-5 py-3 font-semibold">{q}</td><td className="font-bold text-maroon">{p}</td><td className="text-leaf">{s}</td></tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 md:mt-6 md:gap-3 [&>*]:max-md:px-3 [&>*]:max-md:py-2.5 [&>*]:max-md:text-xs">
-                <a href="#contact" className={`${btn} bg-leafy text-on-dark hover:brightness-110`}>Request a Bulk Quote</a>
-                <a href="/shop" className={btnOutline}>View Wholesale Collection</a>
-                <button className={`${btn} underline-offset-4 hover:underline`}>Download Catalogue</button>
+              <div className="mt-4 flex flex-col gap-2 md:mt-6 md:flex-row md:flex-wrap md:gap-3">
+                <a href="#contact" className={`${btn} w-full justify-center bg-leafy text-on-dark hover:brightness-110 md:w-auto`}>Request a Bulk Quote</a>
+                <a href="/shop" className={`${btnOutline} w-full justify-center md:w-auto`}>View Wholesale Collection</a>
+                <button className={`${btn} w-full justify-center underline-offset-4 hover:underline md:w-auto`}>Download Catalogue</button>
               </div>
             </div>
           </div>

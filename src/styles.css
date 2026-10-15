@@ -233,3 +233,21 @@
 /* view-transition names — animations are defined in __root.tsx to bypass Lightning CSS */
 [data-site-header]    { view-transition-name: site-header; }
 [data-category-strip] { view-transition-name: category-strip; }
+
+/* ─── Category strip: mobile marquee (< 768px) ───────────────────────────── */
+@keyframes cat-marquee { to { transform: translateX(-50%); } }
+
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .cat-marquee-track {
+    animation: cat-marquee 28s linear infinite;
+    width: max-content;
+  }
+}
+
+/* reduced-motion: plain scrollable row on mobile (no animation, track behaves normally) */
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  .cat-marquee-track {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -21,10 +21,57 @@ const items: Item[] = [
   { id: "bulk",       title: "Bulk Orders", img: img.hamper,  href: "/#b2b"    },
 ];
 
+function ItemLink({ item, pathname, ghost }: { item: Item; pathname: string; ghost?: boolean }) {
+  const isActive = !ghost && item.slug ? pathname === `/category/${item.slug}` : false;
+  const circleClass = `h-[64px] w-[64px] rounded-full overflow-hidden border-2 transition-transform group-hover:scale-105 ${
+    isActive ? "border-maroon" : "border-gray-200"
+  }`;
+  const labelClass = `mt-1 max-w-[150px] text-[13px] font-medium text-center leading-snug ${
+    isActive ? "text-maroon" : ""
+  }`;
+  const inner = (
+    <>
+      <div className={circleClass}>
+        <img src={item.img} alt={item.title} className="h-full w-full object-cover" loading="lazy" decoding="async" width={1024} height={1024} />
+      </div>
+      <span className={labelClass} title={item.title}>{item.title}</span>
+    </>
+  );
+  const linkClass = "group flex w-[140px] shrink-0 snap-start flex-col items-center lg:w-auto lg:flex-1";
+
+  if (item.slug) {
+    return (
+      <Link
+        to="/category/$slug"
+        params={{ slug: item.slug }}
+        role={ghost ? undefined : "listitem"}
+        tabIndex={ghost ? -1 : undefined}
+        aria-hidden={ghost ? true : undefined}
+        className={linkClass}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <a
+      href={item.href}
+      role={ghost ? undefined : "listitem"}
+      tabIndex={ghost ? -1 : undefined}
+      aria-hidden={ghost ? true : undefined}
+      className={linkClass}
+    >
+      {inner}
+    </a>
+  );
+}
+
 export function CategoryCarousel() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const sectionRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
+  // Keep --carousel-h in sync
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
@@ -39,59 +86,42 @@ export function CategoryCarousel() {
     };
   }, []);
 
+  // Touch: pause animation while finger is down, resume on lift
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const pause = () => track.style.animationPlayState = "paused";
+    const resume = () => track.style.animationPlayState = "";
+    track.addEventListener("touchstart", pause, { passive: true });
+    track.addEventListener("touchend", resume, { passive: true });
+    track.addEventListener("touchcancel", resume, { passive: true });
+    return () => {
+      track.removeEventListener("touchstart", pause);
+      track.removeEventListener("touchend", resume);
+      track.removeEventListener("touchcancel", resume);
+    };
+  }, []);
+
   return (
     <section ref={sectionRef} data-category-strip className="border-b bg-ivory-fade">
-      <div className="container-x">
+      {/* Desktop (≥ 768px): static evenly-spaced row — unchanged */}
+      <div className="container-x hidden md:block">
+        <div role="list" className="flex items-start justify-between py-[10px]">
+          {items.map((item) => <ItemLink key={item.id} item={item} pathname={pathname} />)}
+        </div>
+      </div>
+
+      {/* Mobile (< 768px): seamless marquee */}
+      <div className="relative overflow-hidden md:hidden" style={{ maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)", WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)" }}>
         <div
+          ref={trackRef}
           role="list"
-          className="no-scrollbar flex snap-x snap-mandatory items-start overflow-x-auto py-[10px] gap-3 lg:snap-none lg:gap-0 lg:justify-between"
+          className="cat-marquee-track flex items-start gap-3 py-[10px]"
         >
-          {items.map((item) => {
-            const isActive = item.slug
-              ? pathname === `/category/${item.slug}`
-              : false;
-
-            const circleClass = `h-[64px] w-[64px] rounded-full overflow-hidden border-2 transition-transform group-hover:scale-105 ${
-              isActive ? "border-maroon" : "border-gray-200"
-            }`;
-            const labelClass = `mt-1 max-w-[150px] text-[13px] font-medium text-center leading-snug ${
-              isActive ? "text-maroon" : ""
-            }`;
-
-            const inner = (
-              <>
-                <div className={circleClass}>
-                  <img src={item.img} alt={item.title} className="h-full w-full object-cover" loading="lazy" decoding="async" width={1024} height={1024} />
-                </div>
-                <span className={labelClass} title={item.title}>{item.title}</span>
-              </>
-            );
-
-            if (item.slug) {
-              return (
-                <Link
-                  key={item.id}
-                  to="/category/$slug"
-                  params={{ slug: item.slug }}
-                  role="listitem"
-                  className="group flex w-[140px] shrink-0 snap-start flex-col items-center lg:w-auto lg:flex-1"
-                >
-                  {inner}
-                </Link>
-              );
-            }
-
-            return (
-              <a
-                key={item.id}
-                href={item.href}
-                role="listitem"
-                className="group flex w-[140px] shrink-0 snap-start flex-col items-center lg:w-auto lg:flex-1"
-              >
-                {inner}
-              </a>
-            );
-          })}
+          {/* Primary copy */}
+          {items.map((item) => <ItemLink key={item.id} item={item} pathname={pathname} />)}
+          {/* Ghost copy — aria-hidden, for seamless loop */}
+          {items.map((item) => <ItemLink key={`g-${item.id}`} item={item} pathname={pathname} ghost />)}
         </div>
       </div>
     </section>
