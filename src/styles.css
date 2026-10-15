@@ -174,14 +174,12 @@
 /* ---------- Motion system ---------- */
 @keyframes fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 @keyframes img-reveal { from { opacity: 0; transform: scale(1.06); clip-path: inset(6% 6% 6% 6% round 6px); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0 round 6px); } }
-@keyframes float-soft { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
 @keyframes parallax-y { from { transform: translateY(-6%) scale(1.12); } to { transform: translateY(6%) scale(1.12); } }
 
 @utility animate-fade-up { animation: fade-up .8s cubic-bezier(.2,.7,.2,1) both; }
 @utility animate-img-reveal { animation: img-reveal 1.2s cubic-bezier(.2,.7,.2,1) both; }
-@utility animate-float { animation: float-soft 6s ease-in-out infinite; }
 @utility animate-menu-in { animation: menu-in .25s ease-out both; }
 @utility animate-drawer-in { animation: drawer-in .3s cubic-bezier(.2,.7,.2,1) both; }
 @utility delay-1 { animation-delay: .12s; }

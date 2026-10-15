@@ -177,11 +177,6 @@ function Hero() {
         </div>
       </div>
 
-      {/* Diwali badge — floats top-right */}
-      <div className="absolute right-8 top-6 z-10 animate-float rounded-sm bg-ember [animation-delay:1.5s] px-5 py-3 text-on-dark shadow-lift lg:right-16">
-        <div className="text-[10px] uppercase tracking-widest">Now live</div>
-        <div className="font-display text-xl">Diwali Collection</div>
-      </div>
     </section>
   );
 }
