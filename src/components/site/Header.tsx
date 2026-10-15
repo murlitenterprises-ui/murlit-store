@@ -1,6 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
 import logoCompact from "@/assets/logo-compact.png";
@@ -27,9 +28,31 @@ export function Header() {
   const [mExp, setMExp] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const busy = useRef(false);
   busy.current = !!open || mobile;
+
+  // SSR safety: portal only available after mount
+  useEffect(() => { setMounted(true); }, []);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    document.body.style.overflow = mobile ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobile]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!mobile) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobile(false); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [mobile]);
+
+  // Close on route change
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => { setMobile(false); }, [pathname]);
 
   useEffect(() => {
     setScrolled(window.scrollY > 120);
@@ -243,36 +266,53 @@ export function Header() {
         </div>
       )}
 
-      {mobile && (
-        <div className="fixed inset-0 z-50 bg-ink/40 lg:hidden" onClick={() => setMobile(false)}>
-          <div className="h-full w-[85%] max-w-sm overflow-y-auto bg-background p-5 animate-drawer-in" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between">
-              <img src={logoCompact} alt="Murlit Enterprises" className="h-10 w-auto object-contain" />
-              <button aria-label="Close menu" onClick={() => setMobile(false)}><X className="h-6 w-6" /></button>
-            </div>
-            <input placeholder="Search kits, mala, potli..." className="mb-4 w-full rounded-full border bg-sage px-4 py-2.5 text-sm" />
-            {nav.map((n) => (
-              <div key={n.label} className="border-b">
-                <button className={`flex w-full items-center justify-between py-3.5 text-left font-semibold ${n.emph ? "text-terracotta" : ""}`}
-                  onClick={() => n.mega ? setMExp(mExp === n.label ? null : n.label) : (window.location.href = n.href)}>
-                  {n.label}{n.mega && <ChevronDown className={`h-4 w-4 transition ${mExp === n.label ? "rotate-180" : ""}`} />}
-                </button>
-                {mExp === n.label && (
-                  <ul className="animate-menu-in space-y-2 pb-3 pl-3 text-sm text-muted-foreground">
-                    {n.mega === "pooja"
-                      ? shopMenuColumns[0].links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)
-                      : n.mega === "crochet"
-                        ? shopMenuColumns[4].links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)
-                        : (n.mega === "shop" ? shopMenuColumns : weddingMenuColumns).map((c) => <li key={c.title}><a href="/shop" className="hover:text-maroon">{c.title}</a></li>)
-                    }
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </header>
+
+    {/* Mobile drawer — rendered into document.body via portal so it escapes the header's stacking context */}
+    {mounted && mobile && createPortal(
+      <div className="lg:hidden">
+        {/* Backdrop */}
+        <div
+          aria-hidden="true"
+          style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.45)", viewTransitionName: "none" }}
+          onClick={() => setMobile(false)}
+        />
+        {/* Drawer panel */}
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+          style={{ position: "fixed", left: 0, top: 0, height: "100dvh", width: "min(88vw, 380px)", zIndex: 1000, overflowY: "auto", overscrollBehavior: "contain", viewTransitionName: "none" }}
+          className="bg-background p-5 animate-drawer-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-5 flex items-center justify-between">
+            <img src={logoCompact} alt="Murlit Enterprises" className="h-10 w-auto object-contain" />
+            <button aria-label="Close menu" onClick={() => setMobile(false)}><X className="h-6 w-6" /></button>
+          </div>
+          <input placeholder="Search kits, mala, potli..." className="mb-4 w-full rounded-full border bg-sage px-4 py-2.5 text-sm" />
+          {nav.map((n) => (
+            <div key={n.label} className="border-b">
+              <button className={`flex w-full items-center justify-between py-3.5 text-left font-semibold ${n.emph ? "text-terracotta" : ""}`}
+                onClick={() => n.mega ? setMExp(mExp === n.label ? null : n.label) : (window.location.href = n.href)}>
+                {n.label}{n.mega && <ChevronDown className={`h-4 w-4 transition ${mExp === n.label ? "rotate-180" : ""}`} />}
+              </button>
+              {mExp === n.label && (
+                <ul className="animate-menu-in space-y-2 pb-3 pl-3 text-sm text-muted-foreground">
+                  {n.mega === "pooja"
+                    ? shopMenuColumns[0].links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setMobile(false)} className="hover:text-maroon">{l.label}</a></li>)
+                    : n.mega === "crochet"
+                      ? shopMenuColumns[4].links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setMobile(false)} className="hover:text-maroon">{l.label}</a></li>)
+                      : (n.mega === "shop" ? shopMenuColumns : weddingMenuColumns).map((c) => <li key={c.title}><a href="/shop" onClick={() => setMobile(false)} className="hover:text-maroon">{c.title}</a></li>)
+                  }
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>,
+      document.body
+    )}
     </>
   );
 }
