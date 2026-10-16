@@ -1,7 +1,9 @@
-import { betterAuth } from "better-auth";
+﻿import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "./db/schema";
+
+const isDev = process.env.NODE_ENV !== "production";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -19,7 +21,7 @@ export const auth = betterAuth({
     autoSignIn: true,
     sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
       // TODO Phase 6: send via Resend
-      console.log("[TODO Resend] Password reset for", user.email, "→", url);
+      console.log("[TODO Resend] Password reset for", user.email, "->", url);
     },
   },
   socialProviders:
@@ -40,9 +42,21 @@ export const auth = betterAuth({
   rateLimit: { enabled: true },
   advanced: {
     cookiePrefix: "murlit",
-    secureCookies: process.env.NODE_ENV === "production",
+    secureCookies: !isDev,
   },
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
+  // In dev: dynamically trust any localhost/127.0.0.1 origin regardless of port.
+  // In production: strictly trust only BETTER_AUTH_URL.
+  trustedOrigins: isDev
+    ? (request: Request | undefined) => {
+        const fallback = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+        if (!request) return [fallback];
+        const origin = request.headers.get("origin") ?? "";
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          return [origin];
+        }
+        return [fallback];
+      }
+    : [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
 });
