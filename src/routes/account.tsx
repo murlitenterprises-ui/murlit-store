@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,9 +15,12 @@ import {
   deleteAddress,
   setDefaultAddress,
 } from "@/fns/addresses";
+import { listMyOrders, cancelMyOrder } from "@/fns/orders";
+import { getInvoice } from "@/fns/invoice";
 import { INDIAN_STATES } from "@/lib/india-states";
-import { useEffect } from "react";
 import { toast } from "sonner";
+import { inrFromPaise } from "@/lib/format";
+import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/account")({
   beforeLoad: async () => {
@@ -88,6 +91,12 @@ function AccountPage() {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
 
+  type MyOrder = Awaited<ReturnType<typeof listMyOrders>>[number];
+  const [myOrders, setMyOrders] = useState<MyOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
+
   const user = session?.user;
 
   // ─── Profile form ──────────────────────────────────────────────────────────
@@ -146,6 +155,55 @@ function AccountPage() {
   useEffect(() => {
     if (activeTab === "addresses") loadAddresses();
   }, [activeTab]);
+
+  const loadOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const rows = await listMyOrders();
+      setMyOrders(rows);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "orders") loadOrders();
+  }, [activeTab]);
+
+  const handleCancelOrder = async (orderNumber: string) => {
+    if (!confirm("Cancel this order?")) return;
+    setCancellingOrderId(orderNumber);
+    try {
+      await cancelMyOrder({ data: { orderNumber } });
+      toast.success("Order cancelled");
+      await loadOrders();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to cancel order");
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const handleDownloadInvoice = async (orderNumber: string, invoiceNumber: string | null) => {
+    setDownloadingInvoice(orderNumber);
+    try {
+      const b64 = await getInvoice({ data: { orderNumber } });
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${invoiceNumber ?? orderNumber}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to generate invoice");
+    } finally {
+      setDownloadingInvoice(null);
+    }
+  };
 
   const addressForm = useForm<AddressData>({ resolver: zodResolver(addressSchema) });
 
@@ -475,17 +533,78 @@ function AccountPage() {
             {activeTab === "orders" && (
               <div className="rounded-sm border bg-background p-6">
                 <h2 className="font-display text-xl text-maroon mb-6">My Orders</h2>
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground mb-4">
-                    No orders yet — they'll appear here once you place one.
-                  </p>
-                  <Link
-                    to="/shop"
-                    className="rounded-sm bg-royal px-6 py-2.5 text-sm font-semibold text-on-dark hover:opacity-90"
-                  >
-                    Start Shopping
-                  </Link>
-                </div>
+                {loadingOrders ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : myOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground mb-4">No orders yet — they'll appear here once you place one.</p>
+                    <Link to="/shop" className="rounded-sm bg-royal px-6 py-2.5 text-sm font-semibold text-on-dark hover:opacity-90">
+                      Start Shopping
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {myOrders.map((o) => {
+                      const canCancel = o.paymentMethod === "cod" && o.status === "confirmed";
+                      const canInvoice = ["confirmed", "packed", "shipped", "delivered"].includes(o.status);
+                      const statusColor =
+                        o.status === "delivered" ? "text-green-700 bg-green-50"
+                        : o.status === "cancelled" ? "text-red-600 bg-red-50"
+                        : o.status === "shipped" ? "text-blue-700 bg-blue-50"
+                        : "text-amber-700 bg-amber-50";
+                      return (
+                        <div key={o.id} className="rounded-sm border p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-sm font-bold text-maroon">{o.orderNumber}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor}`}>
+                                {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                              </span>
+                              {o.paymentStatus === "paid" ? (
+                                <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-green-700 bg-green-50">Paid</span>
+                              ) : (
+                                <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-amber-700 bg-amber-50">Payment Pending</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {new Date(o.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              {" · "}{o.itemCount} item{o.itemCount !== 1 ? "s" : ""}
+                              {" · "}<span className="font-semibold text-foreground">{inrFromPaise(o.total)}</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link
+                              to="/order/$orderNumber"
+                              params={{ orderNumber: o.orderNumber }}
+                              className="text-xs font-medium text-maroon hover:underline"
+                            >
+                              View Details
+                            </Link>
+                            {canInvoice && (
+                              <button
+                                onClick={() => handleDownloadInvoice(o.orderNumber, o.invoiceNumber)}
+                                disabled={downloadingInvoice === o.orderNumber}
+                                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-maroon disabled:opacity-50"
+                              >
+                                <Download size={12} />
+                                {downloadingInvoice === o.orderNumber ? "…" : "Invoice"}
+                              </button>
+                            )}
+                            {canCancel && (
+                              <button
+                                onClick={() => handleCancelOrder(o.orderNumber)}
+                                disabled={cancellingOrderId === o.orderNumber}
+                                className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+                              >
+                                {cancellingOrderId === o.orderNumber ? "Cancelling…" : "Cancel"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

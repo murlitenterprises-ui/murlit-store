@@ -1,10 +1,13 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { CheckCircle2, Package, Truck, Clock, ArrowRight, MessageCircle } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Package, Truck, Clock, ArrowRight, MessageCircle, Download } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
-import { getOrder } from "@/fns/checkout";
+import { getMyOrder, cancelMyOrder } from "@/fns/orders";
+import { getInvoice } from "@/fns/invoice";
 import { getCurrentUser } from "@/fns/auth";
 import { inrFromPaise } from "@/lib/format";
+import { toast } from "sonner";
 
 const WA_LINK = "https://wa.me/919999999999";
 
@@ -13,7 +16,7 @@ export const Route = createFileRoute("/order/$orderNumber")({
     const user = await getCurrentUser();
     if (!user) throw redirect({ to: "/login" });
   },
-  loader: async ({ params }) => getOrder({ data: { orderNumber: params.orderNumber } }),
+  loader: async ({ params }) => getMyOrder({ data: { orderNumber: params.orderNumber } }),
   component: OrderPage,
 });
 
@@ -38,9 +41,49 @@ function statusColor(status: string) {
 }
 
 function OrderPage() {
-  const order = Route.useLoaderData();
+  const initial = Route.useLoaderData();
+  const [order, setOrder] = useState(initial);
   const addr = order.shippingAddress as any;
   const isPaid = order.paymentStatus === "paid" || order.paymentMethod === "cod";
+
+  const canCancel = order.paymentMethod === "cod" && order.status === "confirmed";
+  const canInvoice = ["confirmed", "packed", "shipped", "delivered"].includes(order.status);
+  const [cancelling, setCancelling] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+
+  const handleCancel = async () => {
+    if (!confirm("Cancel this order?")) return;
+    setCancelling(true);
+    try {
+      await cancelMyOrder({ data: { orderNumber: order.orderNumber } });
+      const fresh = await getMyOrder({ data: { orderNumber: order.orderNumber } });
+      setOrder(fresh);
+      toast.success("Order cancelled");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to cancel order");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleDownloadInvoice = async () => {
+    setDownloadingInvoice(true);
+    try {
+      const b64 = await getInvoice({ data: { orderNumber: order.orderNumber } });
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${order.invoiceNumber ?? order.orderNumber}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to generate invoice");
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -171,6 +214,25 @@ function OrderPage() {
 
             {/* Actions */}
             <div className="space-y-3">
+              {canInvoice && (
+                <button
+                  onClick={handleDownloadInvoice}
+                  disabled={downloadingInvoice}
+                  className="flex w-full items-center justify-center gap-2 rounded-sm border py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  {downloadingInvoice ? "Generating…" : "Download Invoice"}
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  className="flex w-full items-center justify-center gap-2 rounded-sm border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                >
+                  {cancelling ? "Cancelling…" : "Cancel Order"}
+                </button>
+              )}
               <Link
                 to="/shop"
                 className="flex w-full items-center justify-center gap-2 rounded-sm bg-royal py-3 text-sm font-bold text-on-dark hover:brightness-110 transition"
@@ -186,6 +248,33 @@ function OrderPage() {
                 <MessageCircle className="h-4 w-4" /> Contact on WhatsApp
               </a>
             </div>
+
+            {/* Order timeline */}
+            {order.history && order.history.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-100 shadow-soft p-5">
+                <h2 className="font-semibold text-gray-900 mb-4">Order Timeline</h2>
+                <div className="space-y-3">
+                  {order.history.map((h: any) => (
+                    <div key={h.id} className="flex gap-3">
+                      <div className="mt-1.5 h-2 w-2 rounded-full bg-maroon flex-shrink-0" />
+                      <div className="text-sm text-gray-600">
+                        <p className="font-semibold capitalize">{h.status}</p>
+                        {h.note && <p className="text-xs text-gray-400">{h.note}</p>}
+                        {h.courier && (
+                          <p className="text-xs text-gray-400">
+                            {h.courier} · {h.trackingNumber}
+                            {h.trackingUrl && (
+                              <a href={h.trackingUrl} target="_blank" rel="noopener noreferrer" className="ml-1 text-royal hover:underline">Track</a>
+                            )}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-300 mt-0.5">{new Date(h.createdAt).toLocaleString("en-IN")}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>

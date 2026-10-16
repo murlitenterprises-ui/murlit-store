@@ -278,6 +278,7 @@ export const storeSettings = pgTable("store_settings", {
   stateCode:          text("state_code").notNull(),
   invoicePrefix:      text("invoice_prefix").notNull().default("MUR"),
   nextInvoiceNumber:  integer("next_invoice_number").notNull().default(1),
+  currentFy:          text("current_fy").notNull().default("2025-26"), // e.g. "2026-27"
   pricesIncludeGst:   boolean("prices_include_gst").notNull().default(true),
   freeShippingAbove:  integer("free_shipping_above").notNull().default(50000), // paise
   shippingFee:        integer("shipping_fee").notNull().default(9900),          // paise
@@ -286,6 +287,22 @@ export const storeSettings = pgTable("store_settings", {
   supportEmail:       text("support_email"),
   ...timestamps,
 });
+
+// ─── Order History ────────────────────────────────────────────────────────────
+
+export const orderHistory = pgTable("order_history", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  orderId:        uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  status:         orderStatusEnum("status").notNull(),
+  note:           text("note"),
+  courier:        text("courier"),
+  trackingNumber: text("tracking_number"),
+  trackingUrl:    text("tracking_url"),
+  createdBy:      text("created_by"), // userId of admin or "system"
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("order_history_order_idx").on(t.orderId),
+]);
 
 // ─── Coupons ──────────────────────────────────────────────────────────────────
 

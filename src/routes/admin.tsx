@@ -22,7 +22,7 @@ const navItems = [
   { to: "/admin" as const, label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/admin/products" as const, label: "Products", icon: Package },
   { to: "/admin/categories" as const, label: "Categories", icon: FolderOpen },
-  { to: "/admin/orders" as const, label: "Orders", icon: ShoppingCart, soon: true },
+  { to: "/admin/orders" as const, label: "Orders", icon: ShoppingCart },
   { to: "/admin/customers" as const, label: "Customers", icon: Users, soon: true },
   { to: "/admin/enquiries" as const, label: "Enquiries", icon: MessageSquare, soon: true },
   { to: "/admin/settings" as const, label: "Settings", icon: Settings },
