@@ -47,6 +47,7 @@ type ImageEntry = {
   alt: string;
   sortOrder: number;
   uploading?: boolean;
+  uploadError?: string;
 };
 
 type CatNode = { id: string; name: string; parentId: string | null; slug: string };
@@ -100,13 +101,18 @@ function ImageUploader({
 }) {
   const uploadFile = useCallback(
     async (file: File) => {
+      // Use a stable object reference so we can find this entry after async ops
       const placeholder: ImageEntry = {
         url: URL.createObjectURL(file),
         alt: "",
-        sortOrder: images.length,
+        sortOrder: 0,
         uploading: true,
       };
-      onChange([...images, placeholder]);
+      // Use functional updater to avoid stale closure on `images`
+      onChange((prev: any) => {
+        const next = [...prev, { ...placeholder, sortOrder: prev.length }];
+        return next;
+      });
 
       try {
         const sig = await getCloudinarySignature({ data: { folder: "murlit-products" } });
@@ -120,22 +126,44 @@ function ImageUploader({
           `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
           { method: "POST", body: fd }
         );
-        const json = await res.json() as { secure_url: string; public_id: string };
+        const json = await res.json() as { secure_url?: string; public_id?: string; error?: { message: string } };
+
         URL.revokeObjectURL(placeholder.url);
-        onChange((prev: ImageEntry[]) =>
-          prev.map((img) =>
-            img === placeholder
-              ? { url: json.secure_url, publicId: json.public_id, alt: "", sortOrder: img.sortOrder, uploading: false }
+
+        if (!res.ok || json.error || !json.secure_url) {
+          const errMsg = json.error?.message ?? `Upload failed (HTTP ${res.status})`;
+          onChange((prev: any) =>
+            prev.map((img: ImageEntry) =>
+              img.url === placeholder.url
+                ? { ...img, uploading: false, uploadError: errMsg }
+                : img
+            )
+          );
+          toast.error(`Upload failed: ${errMsg}`);
+          return;
+        }
+
+        onChange((prev: any) =>
+          prev.map((img: ImageEntry) =>
+            img.url === placeholder.url
+              ? { url: json.secure_url!, publicId: json.public_id, alt: "", sortOrder: img.sortOrder, uploading: false }
               : img
           )
         );
         toast.success("Image uploaded");
-      } catch {
-        onChange((prev: ImageEntry[]) => prev.filter((img) => img !== placeholder));
+      } catch (e: any) {
+        URL.revokeObjectURL(placeholder.url);
+        onChange((prev: any) =>
+          prev.map((img: ImageEntry) =>
+            img.url === placeholder.url
+              ? { ...img, uploading: false, uploadError: e?.message ?? "Upload failed" }
+              : img
+          )
+        );
         toast.error("Image upload failed");
       }
     },
-    [images, onChange]
+    [onChange]
   );
 
   const handleFiles = (files: FileList | null) => {
@@ -179,7 +207,17 @@ function ImageUploader({
                 <Loader2 size={20} className="text-white animate-spin" />
               </div>
             )}
-            {!img.uploading && (
+            {img.uploadError && (
+              <div className="absolute inset-0 bg-red-900/80 flex flex-col items-center justify-center p-1.5 gap-1">
+                <p className="text-white text-[9px] text-center leading-tight">{img.uploadError}</p>
+                <button
+                  type="button"
+                  onClick={() => onChange(images.filter((_, i) => i !== idx))}
+                  className="text-white/80 text-[9px] underline"
+                >Remove</button>
+              </div>
+            )}
+            {!img.uploading && !img.uploadError && (
               <>
                 {idx === 0 && (
                   <div className="absolute top-1 left-1 bg-[var(--gold)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
@@ -322,9 +360,22 @@ export function ProductForm({
       ? discountPct(watchPriceRs * 100, watchMrpRs * 100)
       : null;
 
+  const hasUploadingImages = images.some((img) => img.uploading);
+  const hasFailedImages = images.some((img) => img.uploadError);
+
   const onSubmit = async (data: FormData) => {
-    if (images.some((img) => img.uploading)) {
+    if (hasUploadingImages) {
       toast.error("Please wait for images to finish uploading");
+      return;
+    }
+    if (hasFailedImages) {
+      toast.error("Remove failed images before saving");
+      return;
+    }
+    // Extra guard: never send images without a real URL
+    const readyImages = images.filter((img) => img.url.startsWith("http"));
+    if (readyImages.length !== images.length) {
+      toast.error("Some images are missing a URL — please re-upload them");
       return;
     }
     setSaving(true);
@@ -353,7 +404,7 @@ export function ProductForm({
         priceIncludesGst: data.priceIncludesGst,
         seoTitle: data.seoTitle || undefined,
         seoDescription: data.seoDescription || undefined,
-        images: images.map((img, i) => ({
+        images: readyImages.map((img, i) => ({
           id: img.id,
           url: img.url,
           publicId: img.publicId,
@@ -576,10 +627,20 @@ export function ProductForm({
       </Section>
 
       {/* Submit */}
+      {hasUploadingImages && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+          Waiting for images to upload…
+        </p>
+      )}
+      {hasFailedImages && (
+        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          Some images failed to upload. Remove them before saving.
+        </p>
+      )}
       <div className="flex gap-3 pb-8">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || hasUploadingImages || hasFailedImages}
           className="rounded bg-[var(--maroon)] px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 flex items-center gap-2"
         >
           {saving && <Loader2 size={14} className="animate-spin" />}

@@ -13,10 +13,11 @@ export const getCloudinarySignature = createServerFn()
     const apiKey = process.env.CLOUDINARY_API_KEY!;
     const apiSecret = process.env.CLOUDINARY_API_SECRET!;
     const timestamp = Math.round(Date.now() / 1000);
+    // Cloudinary requires SHA1(sorted_params + api_secret), NOT HMAC-SHA1
     const paramsToSign = `folder=${data.folder}&timestamp=${timestamp}`;
     const signature = crypto
-      .createHmac("sha1", apiSecret)
-      .update(paramsToSign)
+      .createHash("sha1")
+      .update(paramsToSign + apiSecret)
       .digest("hex");
     return { cloudName, apiKey, timestamp, folder: data.folder, signature };
   });
@@ -32,8 +33,8 @@ export const deleteCloudinaryImage = createServerFn()
     const timestamp = Math.round(Date.now() / 1000);
     const paramsToSign = `public_id=${data.publicId}&timestamp=${timestamp}`;
     const signature = crypto
-      .createHmac("sha1", apiSecret)
-      .update(paramsToSign)
+      .createHash("sha1")
+      .update(paramsToSign + apiSecret)
       .digest("hex");
     const body = new URLSearchParams({
       public_id: data.publicId,

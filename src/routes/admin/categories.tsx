@@ -73,7 +73,12 @@ function CategoryForm({
       const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
         method: "POST", body: fd,
       });
-      const json = await res.json() as { secure_url: string };
+      const json = await res.json() as { secure_url?: string; error?: { message: string } };
+      if (!res.ok || json.error || !json.secure_url) {
+        const errMsg = json.error?.message ?? `Upload failed (HTTP ${res.status})`;
+        toast.error(`Upload failed: ${errMsg}`);
+        return;
+      }
       setValue("image", json.secure_url);
       toast.success("Image uploaded");
     } catch {
