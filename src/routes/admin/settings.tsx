@@ -17,8 +17,14 @@ const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const schema = z.object({
   legalName: z.string().min(1, "Required"),
-  gstin: z.string().regex(GSTIN_RE, "Invalid GSTIN format").optional().or(z.literal("")),
+  gstin: z.string().regex(GSTIN_RE, "Invalid GSTIN format (15 chars)").optional().or(z.literal("")),
   registeredAddress: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  pincode: z.string().regex(/^\d{6}$/, "Must be 6 digits").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  businessEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   state: z.string().min(1, "Required"),
   stateCode: z.string().min(1, "Required"),
   invoicePrefix: z.string().min(1).max(10),
@@ -36,17 +42,19 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    formState: { errors },
+    register, handleSubmit, watch, setValue, formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       legalName: settings?.legalName ?? "",
       gstin: settings?.gstin ?? "",
       registeredAddress: settings?.registeredAddress ?? "",
+      addressLine1: settings?.addressLine1 ?? "",
+      addressLine2: settings?.addressLine2 ?? "",
+      city: settings?.city ?? "",
+      pincode: settings?.pincode ?? "",
+      phone: settings?.phone ?? "",
+      businessEmail: settings?.businessEmail ?? "",
       state: settings?.state ?? "",
       stateCode: settings?.stateCode ?? "",
       invoicePrefix: settings?.invoicePrefix ?? "MUR",
@@ -66,6 +74,13 @@ function SettingsPage() {
         data: {
           ...data,
           gstin: data.gstin || undefined,
+          addressLine1: data.addressLine1 || undefined,
+          addressLine2: data.addressLine2 || undefined,
+          city: data.city || undefined,
+          pincode: data.pincode || undefined,
+          phone: data.phone || undefined,
+          businessEmail: data.businessEmail || undefined,
+          registeredAddress: data.registeredAddress || undefined,
           freeShippingAbove: Math.round(data.freeShippingAboveRs * 100),
           shippingFee: Math.round(data.shippingFeeRs * 100),
           whatsappNumber: data.whatsappNumber || undefined,
@@ -103,6 +118,16 @@ function SettingsPage() {
   );
 
   const watchedState = watch("state");
+  const watchedGstin = watch("gstin");
+  const watchedAddressLine1 = watch("addressLine1");
+  const watchedCity = watch("city");
+  const watchedPincode = watch("pincode");
+
+  const missingInvoiceFields: string[] = [];
+  if (!settings?.gstin && !watchedGstin) missingInvoiceFields.push("GSTIN");
+  if (!settings?.addressLine1 && !watchedAddressLine1) missingInvoiceFields.push("Address Line 1");
+  if (!settings?.city && !watchedCity) missingInvoiceFields.push("City");
+  if (!settings?.pincode && !watchedPincode) missingInvoiceFields.push("Pincode");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
@@ -111,18 +136,31 @@ function SettingsPage() {
         <p className="text-sm text-gray-500 mt-0.5">GST invoicing and store configuration</p>
       </div>
 
-      {!watchedState && (
+      {(!watchedState || missingInvoiceFields.length > 0) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          ⚠️ <strong>Business state not set.</strong> GST type (CGST+SGST vs IGST) cannot be determined for orders until you set the Business State below.
+          ⚠️ <strong>Incomplete invoice details.</strong>{" "}
+          {!watchedState
+            ? "Business state is not set — GST type cannot be determined."
+            : `Missing: ${missingInvoiceFields.join(", ")}. These will appear blank on tax invoices.`}
         </div>
       )}
 
-      {/* Legal */}
+      {/* Legal + Business Details */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Legal Details</h2>
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Legal & Business Details</h2>
         <F label="Legal Name" name="legalName" required placeholder="Murlit Enterprises" />
-        <F label="GSTIN" name="gstin" placeholder="22AAAAA0000A1Z5" hint="15-char GST number" />
-        <F label="Registered Address" name="registeredAddress" placeholder="Full address for invoices" />
+        <F label="GSTIN" name="gstin" placeholder="08AAAAA0000A1Z5"
+          hint="15-char GST number. First 2 digits must match your state's GST code (Rajasthan = 08)." />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <F label="Address Line 1" name="addressLine1" placeholder="Shop / Building / Street" />
+          <F label="Address Line 2" name="addressLine2" placeholder="Area / Locality (optional)" />
+          <F label="City" name="city" placeholder="Jaipur" />
+          <F label="Pincode" name="pincode" placeholder="302001" hint="6-digit PIN code" />
+          <F label="Business Phone" name="phone" placeholder="+91 98765 43210" />
+          <F label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.in" />
+        </div>
+        <F label="Registered Address (legacy, used on invoices as fallback)" name="registeredAddress"
+          placeholder="Full one-line address" hint="If Address Line 1/City/Pincode are filled, those are preferred on invoices." />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -86,7 +86,20 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   // Seller info (left)
   drawText(page, settings?.legalName ?? "Murlit Enterprises", M, y, boldFont, 10);
   y -= 13;
-  if (settings?.registeredAddress) {
+  // Prefer structured address fields; fall back to registeredAddress
+  if (settings?.addressLine1) {
+    drawText(page, settings.addressLine1, M, y, regFont, 8, rgb(0.3, 0.3, 0.3));
+    y -= 11;
+    if (settings.addressLine2) {
+      drawText(page, settings.addressLine2, M, y, regFont, 8, rgb(0.3, 0.3, 0.3));
+      y -= 11;
+    }
+    const cityPin = [settings.city, settings.pincode].filter(Boolean).join(" – ");
+    if (cityPin) {
+      drawText(page, cityPin, M, y, regFont, 8, rgb(0.3, 0.3, 0.3));
+      y -= 11;
+    }
+  } else if (settings?.registeredAddress) {
     const addrLines = settings.registeredAddress.split(",");
     for (let i = 0; i < Math.min(addrLines.length, 3); i++) {
       drawText(page, addrLines[i].trim(), M, y, regFont, 8, rgb(0.3, 0.3, 0.3));

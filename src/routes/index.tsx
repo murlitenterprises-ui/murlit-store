@@ -8,6 +8,7 @@ import { ProductCard } from "@/components/site/ProductCard";
 import { SectionHead, TextLink } from "@/components/site/Section";
 import { img, occasions } from "@/lib/catalog";
 import { listProducts, getNavCategories } from "@/fns/catalog";
+import { submitContactEnquiry, submitBulkEnquiry, subscribeNewsletter } from "@/fns/enquiries";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -52,6 +53,7 @@ function Home() {
         <Recipient />
         <Story />
         <Testimonials />
+        <Contact />
         <Newsletter />
       </main>
       <Footer />
@@ -530,17 +532,101 @@ function Testimonials() {
   );
 }
 
+function Contact() {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [errMsg, setErrMsg] = useState("");
+  const honeypotRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !message.trim()) return;
+    setStatus("sending");
+    try {
+      await submitContactEnquiry({ data: { name, phone: phone || undefined, email: email || undefined, message, honeypot: honeypotRef.current?.value ?? "" } });
+      setStatus("done");
+    } catch (err: any) {
+      setErrMsg(err?.message ?? "Something went wrong — please try again.");
+      setStatus("error");
+    }
+  };
+
+  return (
+    <section id="contact" className="py-10 md:py-12 lg:py-16 bg-ivory border-t">
+      <div className="container-x max-w-xl">
+        <SectionHead eyebrow="Get in touch" title="Send us an enquiry" />
+        {status === "done" ? (
+          <div className="mt-6 rounded-md bg-green-50 border border-green-200 px-5 py-4 text-green-800 text-sm font-medium text-center">
+            ✓ Thank you! We'll get back to you within 24 hours.
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {/* Honeypot — hidden from real users */}
+            <input ref={honeypotRef} type="text" name="website" tabIndex={-1} style={{ display: "none" }} aria-hidden="true" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name <span className="text-maroon">*</span></label>
+                <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Message <span className="text-maroon">*</span></label>
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} required rows={4} placeholder="Tell us what you're looking for…" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon resize-none" />
+            </div>
+            {status === "error" && <p className="text-sm text-red-600">{errMsg}</p>}
+            <button type="submit" disabled={status === "sending"} className={`${btnPrimary} disabled:opacity-60`}>
+              {status === "sending" ? "Sending…" : "Send Enquiry"}
+            </button>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Newsletter() {
+  const [nlEmail, setNlEmail] = useState("");
+  const [nlStatus, setNlStatus] = useState<"idle" | "sending" | "done" | "already">("idle");
+
+  const handleNl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nlEmail) return;
+    setNlStatus("sending");
+    try {
+      const res = await subscribeNewsletter({ data: { email: nlEmail } });
+      setNlStatus(res.alreadySubscribed ? "already" : "done");
+    } catch {
+      setNlStatus("idle");
+    }
+  };
+
   return (
     <section className="py-10 md:py-12 lg:py-16 bg-ivory-fade border-t">
       <div className="container-x max-w-2xl text-center">
         <span className="eyebrow ornament">Stay in touch</span>
         <h2 className="mt-3 text-display font-medium">Discover Something Meaningful.</h2>
         <p className="mt-3 text-[18px] text-muted-foreground">Festive edits, new handcrafted arrivals and early access — once a month.</p>
-        <form className="mx-auto mt-8 flex max-w-md gap-2" onSubmit={(e) => e.preventDefault()}>
-          <input type="email" placeholder="Your email address" className="flex-1 rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
-          <button className={btnPrimary}>Subscribe</button>
-        </form>
+        {nlStatus === "done" ? (
+          <p className="mt-8 text-sm font-semibold text-green-700">✓ You're subscribed! Look out for our next edit.</p>
+        ) : nlStatus === "already" ? (
+          <p className="mt-8 text-sm font-semibold text-amber-700">You're already on the list — we'll see you in the inbox!</p>
+        ) : (
+          <form className="mx-auto mt-8 flex max-w-md gap-2" onSubmit={handleNl}>
+            <input type="email" value={nlEmail} onChange={(e) => setNlEmail(e.target.value)} required placeholder="Your email address" className="flex-1 rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+            <button disabled={nlStatus === "sending"} className={`${btnPrimary} disabled:opacity-60`}>{nlStatus === "sending" ? "…" : "Subscribe"}</button>
+          </form>
+        )}
         <a href="#" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-leaf"><MessageCircle className="h-4 w-4" /> Or enquire on WhatsApp</a>
       </div>
     </section>

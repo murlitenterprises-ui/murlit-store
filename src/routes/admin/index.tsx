@@ -1,10 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getDashboardStats } from "@/fns/admin/dashboard";
+import { getSettingsCompleteness } from "@/fns/admin/settings";
 import { inrFromPaise } from "@/lib/format";
 import { Package, ToggleRight, AlertTriangle, Users, FolderOpen, TrendingUp, ShoppingCart, IndianRupee } from "lucide-react";
 
 export const Route = createFileRoute("/admin/")({
-  loader: () => getDashboardStats(),
+  loader: async () => {
+    const [stats, completeness] = await Promise.all([getDashboardStats(), getSettingsCompleteness()]);
+    return { stats, completeness };
+  },
   component: Dashboard,
 });
 
@@ -44,7 +48,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function Dashboard() {
-  const stats = Route.useLoaderData();
+  const { stats, completeness } = Route.useLoaderData();
   const totalOrders = Object.values(stats.ordersByStatus).reduce((a, b) => a + b, 0);
 
   return (
@@ -53,6 +57,17 @@ function Dashboard() {
         <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-0.5">Overview of your store</p>
       </div>
+
+      {!completeness.complete && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <strong>Incomplete invoice settings.</strong>{" "}
+            Missing: {completeness.missing.join(", ")}.{" "}
+            <Link to="/admin/settings" className="underline font-semibold">Configure settings →</Link>
+          </span>
+        </div>
+      )}
 
       {/* Sales cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

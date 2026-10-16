@@ -6,7 +6,7 @@ import { requireUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { assignInvoiceNumber } from "@/server/invoice-service";
-import { sendOrderConfirmationEmail } from "@/lib/email";
+import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
 
 // Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
 // Accepts: "DL", "Delhi", "07" (GSTIN prefix), "dl" — returns "DL" or the uppercased input as fallback.
@@ -309,8 +309,6 @@ export const placeOrder = createServerFn()
           .set({ stock: newStock, updatedAt: new Date() })
           .where(eq(products.id, p.id));
       }
-      // Assign invoice number atomically
-      await assignInvoiceNumber(order.id);
       // Record confirmed in history
       await db.insert(orderHistory).values({
         orderId: order.id,
@@ -319,14 +317,31 @@ export const placeOrder = createServerFn()
         createdBy: user.id,
       });
       await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
-      // Send confirmation email (non-blocking, silent on failure)
+      const invNum = await assignInvoiceNumber(order.id);
+      // Generate PDF for attachment
+      let invoicePdfBase64: string | undefined;
+      try {
+        const { generateInvoicePdf } = await import("@/server/invoice-service");
+        const pdfBytes = await generateInvoicePdf(order.id);
+        invoicePdfBase64 = Buffer.from(pdfBytes).toString("base64");
+      } catch {}
+      // Send confirmation email (non-blocking)
       sendOrderConfirmationEmail({
         orderNumber: order.orderNumber,
         email: user.email,
         total: order.total,
         paymentMethod: "cod",
+        invoiceNumber: invNum,
         shippingAddress: data.shippingAddress as Record<string, string>,
         items: lineItems.map((li) => ({ name: li.name, qty: li.qty, price: li.price })),
+        invoicePdfBase64,
+      }).catch(() => {});
+      sendAdminNewOrderEmail({
+        orderNumber: order.orderNumber,
+        email: user.email,
+        total: order.total,
+        paymentMethod: "cod",
+        shippingAddress: data.shippingAddress as Record<string, string>,
       }).catch(() => {});
     }
 
@@ -453,14 +468,29 @@ export const verifyRazorpayPayment = createServerFn()
     const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
     if (cart) await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
 
-    // Send confirmation email (non-blocking)
+    // Generate PDF for attachment
+    let invoicePdfBase64Rzp: string | undefined;
+    try {
+      const { generateInvoicePdf } = await import("@/server/invoice-service");
+      const pdfBytes = await generateInvoicePdf(order.id);
+      invoicePdfBase64Rzp = Buffer.from(pdfBytes).toString("base64");
+    } catch {}
     sendOrderConfirmationEmail({
       orderNumber: order.orderNumber,
       email: user.email,
       total: order.total,
       paymentMethod: "razorpay",
+      invoiceNumber: order.invoiceNumber,
       shippingAddress: order.shippingAddress as Record<string, string>,
       items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      invoicePdfBase64: invoicePdfBase64Rzp,
+    }).catch(() => {});
+    sendAdminNewOrderEmail({
+      orderNumber: order.orderNumber,
+      email: user.email,
+      total: order.total,
+      paymentMethod: "razorpay",
+      shippingAddress: order.shippingAddress as Record<string, string>,
     }).catch(() => {});
 
     return { success: true };

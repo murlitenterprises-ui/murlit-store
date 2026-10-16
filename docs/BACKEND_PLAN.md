@@ -103,13 +103,18 @@
 - `codEnabled` column added to `store_settings` via migration `0002_panoramic_power_pack.sql`
 - Build: ✅ `bun run build` passes
 
-### Phase 6 — Orders & Invoicing
-- Customer "My Orders" page + order tracking
-- Admin order management (status updates)
-- Sequential invoice numbers per financial year (e.g. `MUR/2026-27/0001`)
-- Downloadable GST-compliant PDF invoice
-- Order emails via Resend
-- Custom-order, bulk/B2B, contact, and newsletter forms saved to DB → visible in admin
+### ✅ Phase 6 — Orders, Invoicing, Enquiries, Customers, Emails
+- Customer "My Orders" page + order detail with timeline, invoice download, cancel
+- Admin order management: list (filter/search/date range), detail view, status flow (confirmed→packed→shipped→delivered), courier+tracking for shipped, COD payment mark, cancel (restores stock), order history timeline
+- Sequential invoice numbers per Indian financial year: `MUR/2026-27/0001` (prefix/FY/4-digit)
+- GST-compliant PDF invoice via `pdf-lib` (server-only `src/server/invoice-service.ts`): seller block with structured address fields (falls back to `registeredAddress`), buyer/shipping block, line items with CGST+SGST/IGST breakdown, total in words (`inrInWords`)
+- Admin Settings: 6 new business-detail fields (`addressLine1`, `addressLine2`, `city`, `pincode`, `phone`, `businessEmail`); GSTIN cross-validated against state GST code (Rajasthan=08); warning banner on dashboard + settings when any invoice-required field is missing; migration `0004_noisy_joystick.sql`
+- Enquiries: contact/bulk/custom forms wired to `enquiries` table with Zod validation, honeypot, in-memory rate limit (3/IP/10min); `/admin/enquiries` — paginated list, type/status filters, inline message view, status update
+- Newsletter: footer subscribe form → `newsletter_subscribers`; duplicate email returns friendly "already subscribed" message
+- Admin Customers (`/admin/customers`): searchable paginated list (name/email/phone/joined/orders/spent); detail view (orders + saved addresses)
+- Emails via Resend (`fetch`, never SDK): order confirmation with PDF attachment, admin new-order alert, order shipped (courier+tracking), order cancelled, password reset (replaces TODO in auth.ts); all silent/fallback if `RESEND_API_KEY` not set; `.env.example` updated with `RESEND_API_KEY`, `EMAIL_FROM`, `ADMIN_NOTIFY_EMAIL`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
+- Test user `cs-1792127247392@example.com` deleted from DB
+- Build: ✅ `bun run build` passes
 
 ### Phase 7 — PWA
 - `manifest.json`, icons

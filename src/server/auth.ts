@@ -20,8 +20,8 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     autoSignIn: true,
     sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
-      // TODO Phase 6: send via Resend
-      console.log("[TODO Resend] Password reset for", user.email, "->", url);
+      const { sendPasswordResetEmail } = await import("./email-helper");
+      await sendPasswordResetEmail(user.email, url);
     },
   },
   socialProviders:

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, orders, orderItems, orderHistory, products } from "@/server/db";
 import { eq, and, ilike, or, desc, gte, lte, sql, count } from "drizzle-orm";
 import { requireAdmin } from "@/server/auth-helpers";
+import { sendOrderShippedEmail, sendOrderCancelledEmail } from "@/lib/email";
 
 const PAGE_SIZE = 20;
 
@@ -115,6 +116,19 @@ export const updateOrderStatus = createServerFn()
       createdBy: (admin as any).id,
     });
 
+    if (data.status === "shipped" && data.courier && data.trackingNumber) {
+      const [ord] = await db.select({ orderNumber: orders.orderNumber, email: orders.email }).from(orders).where(eq(orders.id, data.orderId)).limit(1);
+      if (ord) {
+        sendOrderShippedEmail({
+          orderNumber: ord.orderNumber,
+          email: ord.email,
+          courier: data.courier,
+          trackingNumber: data.trackingNumber,
+          trackingUrl: data.trackingUrl,
+        }).catch(() => {});
+      }
+    }
+
     return { success: true };
   });
 
@@ -169,5 +183,12 @@ export const cancelOrderAdmin = createServerFn()
       note: data.note ?? "Cancelled by admin",
       createdBy: (admin as any).id,
     });
+
+    sendOrderCancelledEmail({
+      orderNumber: order.orderNumber,
+      email: order.email,
+      reason: data.note,
+    }).catch(() => {});
+
     return { success: true };
   });
