@@ -60,17 +60,31 @@
 - `src/server/db/make-admin.ts` — CLI script to promote a user to admin
 - `make-admin` npm script added to package.json
 
-### Phase 4 — Admin Panel (`/admin`, admin-only)
-- Dashboard (order counts, revenue)
-- Products CRUD with multiple image upload (Cloudinary)
-- Categories & sub-categories CRUD (replaces hardcoded `menu.ts`)
-- Store GST settings page (edit `store_settings`)
+### ✅ Phase 4A — Admin Panel core (done)
+- `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/account` — Header + Footer added
+- Admin layout route (`src/routes/admin.tsx`): maroon sidebar, mobile hamburger/drawer, route guard via `beforeLoad` (redirects non-admin to `/`)
+- Dashboard (`/admin`): stat cards — total/active products, out-of-stock, low-stock, customers, categories
+- Products CRUD (`/admin/products`):
+  - Paginated list with search, category/status/stock filters, bulk activate/deactivate/delete
+  - New product form (`/admin/products/new`) with Cloudinary image upload (drag-and-drop, reorder, alt text), all fields: name, slug, SKU, price/MRP (₹ input, auto-convert to paise), stock, category (parent → sub dropdowns), description, tags, occasions, attributes, GST/HSN, SEO title/description, active/featured toggles
+  - Edit product (`/admin/products/:id/edit`)
+  - Inline active/featured toggles + soft delete
+- Categories CRUD (`/admin/categories`): tree table, inline create/edit form, Cloudinary image upload, reorder (up/down), delete (blocked if products exist)
+- Settings (`/admin/settings`): upsert `store_settings` row
+- Cloudinary signed upload: HMAC-SHA1 server-side signature via `src/fns/admin/upload.ts`; client POSTs directly to Cloudinary (secret never in browser)
+- `src/lib/cloudinary.ts`: `clImg()` helper inserts `f_auto,q_auto,w_N,c_fill` transforms
+- `@utility inp` / `@utility err` shorthand Tailwind utilities in `src/styles.css`
+- Playwright integration test (temp `pw-admin-test.mjs`, deleted after pass): login, dashboard, categories, new product, edit, /shop, settings, 390px mobile, customer-denied-admin
+
+### Phase 4B — Admin extensions (next)
 - Excel/CSV bulk product import:
   - Downloadable template
   - Upload → preview with row-level validation errors
   - Import: creates new products + updates existing by SKU
   - Image URLs optional
-- HSN + GST rate fields in product form and import template
+- Customers list (view-only, with order history)
+- Enquiries / contact-form submissions inbox
+- HSN + GST rate fields visible in product form (already in DB schema)
 
 ### Phase 5 — Cart, Wishlist & Checkout
 - Cart: guest (localStorage) + logged-in (DB), merged on login

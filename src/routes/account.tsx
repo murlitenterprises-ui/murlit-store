@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useSession, signOut, authClient } from "@/lib/auth-client";
+import { Header } from "@/components/site/Header";
+import { Footer } from "@/components/site/Footer";
 import { getCurrentUser } from "@/fns/auth";
 import {
   listAddresses,
@@ -223,7 +225,9 @@ function AccountPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-sage">
+    <>
+      <Header />
+      <div className="min-h-screen bg-sage">
       <div className="container-x py-10">
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -563,6 +567,8 @@ function AccountPage() {
           </main>
         </div>
       </div>
-    </div>
+      </div>
+      <Footer />
+    </>
   );
 }

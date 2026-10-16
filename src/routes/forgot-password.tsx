@@ -4,6 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { Header } from "@/components/site/Header";
+import { Footer } from "@/components/site/Footer";
 
 const schema = z.object({
   email: z.email("Enter a valid email"),
@@ -42,7 +44,9 @@ function ForgotPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-sage px-4 py-16">
+    <>
+      <Header />
+      <div className="flex min-h-[calc(100vh-180px)] items-center justify-center bg-sage px-4 py-16">
       <div className="w-full max-w-md rounded-sm border bg-background p-8 shadow-lift">
         <div className="mb-8 text-center">
           <h1 className="font-display text-3xl text-maroon">Reset Password</h1>
@@ -97,6 +101,8 @@ function ForgotPasswordPage() {
           </Link>
         </p>
       </div>
-    </div>
+      </div>
+      <Footer />
+    </>
   );
 }
