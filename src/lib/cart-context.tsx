@@ -1,7 +1,8 @@
-import { createContext, useContext, useCallback } from "react";
+import { createContext, useContext, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getCart, addToCart, updateQty, removeItem } from "@/fns/cart";
+import { getCart, addToCart, updateQty, removeItem, mergeGuestCartFromCookie } from "@/fns/cart";
+import { useSession } from "@/lib/auth-client";
 
 export type CartItem = Awaited<ReturnType<typeof getCart>>[number];
 
@@ -27,6 +28,17 @@ const Ctx = createContext<CartContext>({
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? null;
+
+  // On every authenticated mount, merge the guest cart cookie into the user cart.
+  // No-ops if the murlit_cart cookie doesn't exist.
+  useEffect(() => {
+    if (!userId) return;
+    mergeGuestCartFromCookie().then((merged) => {
+      if (merged) qc.invalidateQueries({ queryKey: ["cart"] });
+    }).catch(() => {});
+  }, [userId, qc]);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["cart"],

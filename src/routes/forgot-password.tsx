@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -20,6 +20,8 @@ function ForgotPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const {
     register,
@@ -70,7 +72,7 @@ function ForgotPasswordPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} method="post" action="" className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Email</label>
                 <input
@@ -86,7 +88,7 @@ function ForgotPasswordPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={!mounted || loading}
                 className="w-full rounded-sm bg-royal py-2.5 text-sm font-semibold text-on-dark transition hover:opacity-90 disabled:opacity-60"
               >
                 {loading ? "Sending…" : "Send Reset Link"}

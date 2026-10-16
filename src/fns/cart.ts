@@ -256,6 +256,76 @@ export const mergeGuestCart = createServerFn()
     await db.delete(carts).where(eq(carts.id, guestCart[0].id));
   });
 
+/**
+ * Merge the guest cart (read from murlit_cart cookie) into the logged-in user's cart.
+ * Safe to call on every authenticated page load — no-ops if no guest cart cookie.
+ * Clears the guest cookie after merge.
+ */
+export const mergeGuestCartFromCookie = createServerFn().handler(async () => {
+  const user = await getSessionUser();
+  if (!user) return false; // not logged in, nothing to do
+
+  const req = getRequest();
+  const cookieHeader = req?.headers.get("cookie") ?? "";
+  const cookieMatch = cookieHeader.match(new RegExp(`(?:^|; )${CART_COOKIE}=([^;]+)`));
+  const sessionKey = cookieMatch?.[1] ?? null;
+  if (!sessionKey) return false; // no guest cart cookie
+
+  // Find guest cart
+  const [guestCart] = await db
+    .select({ id: carts.id })
+    .from(carts)
+    .where(eq(carts.sessionKey, sessionKey))
+    .limit(1);
+  if (!guestCart) {
+    // Cookie exists but cart deleted; just clear the cookie
+    setCookie(CART_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 });
+    return false;
+  }
+
+  // Get or create user cart
+  let [userCart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
+  if (!userCart) {
+    [userCart] = await db.insert(carts).values({ userId: user.id }).returning({ id: carts.id });
+  }
+
+  // Merge items: sum qty, cap at stock, skip inactive/out-of-stock
+  const guestItems = await db
+    .select({ productId: cartItems.productId, qty: cartItems.qty })
+    .from(cartItems)
+    .where(eq(cartItems.cartId, guestCart.id));
+
+  for (const item of guestItems) {
+    const [prod] = await db
+      .select({ stock: products.stock, isActive: products.isActive })
+      .from(products)
+      .where(eq(products.id, item.productId))
+      .limit(1);
+    if (!prod || !prod.isActive || prod.stock < 1) continue;
+
+    const [existing] = await db
+      .select({ id: cartItems.id, qty: cartItems.qty })
+      .from(cartItems)
+      .where(and(eq(cartItems.cartId, userCart.id), eq(cartItems.productId, item.productId)))
+      .limit(1);
+
+    const maxQty = prod.stock;
+    if (existing) {
+      const newQty = Math.min(existing.qty + item.qty, maxQty);
+      await db.update(cartItems).set({ qty: newQty, updatedAt: new Date() }).where(eq(cartItems.id, existing.id));
+    } else {
+      await db.insert(cartItems).values({ cartId: userCart.id, productId: item.productId, qty: Math.min(item.qty, maxQty) });
+    }
+  }
+
+  // Delete guest cart and clear cookie
+  await db.delete(cartItems).where(eq(cartItems.cartId, guestCart.id));
+  await db.delete(carts).where(eq(carts.id, guestCart.id));
+  setCookie(CART_COOKIE, "", { ...COOKIE_OPTS, maxAge: 0 });
+
+  return true; // merged
+});
+
 /** Get just the cart item count (for badge). */
 export const getCartCount = createServerFn().handler(async () => {
   try {
