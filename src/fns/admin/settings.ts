@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   stateCode: z.string().min(1),
   invoicePrefix: z.string().min(1).max(10),
   pricesIncludeGst: z.boolean(),
+  codEnabled: z.boolean(),
   freeShippingAbove: z.number().int().min(0),
   shippingFee: z.number().int().min(0),
   whatsappNumber: z.string().optional(),

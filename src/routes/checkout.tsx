@@ -111,6 +111,8 @@ function CheckoutPage() {
     }
 
     setPlacing(true);
+    let successOrderNumber: string | undefined;
+    let successOrderId: string | undefined;
     try {
       const result = await placeOrder({
         data: {
@@ -128,71 +130,75 @@ function CheckoutPage() {
           customerGstin: isGstBusiness ? gstin : undefined,
         },
       });
+      successOrderNumber = result.orderNumber;
+      successOrderId = result.orderId;
 
-      if (paymentMethod === "cod") {
-        invalidateCart();
-        navigate({ to: "/order/$orderNumber", params: { orderNumber: result.orderNumber } });
-        return;
-      }
+      if (paymentMethod !== "cod") {
+        // Razorpay flow
+        const rzpData = await createRazorpayOrder({ data: { orderId: successOrderId! } });
 
-      // Razorpay flow
-      const rzpData = await createRazorpayOrder({ data: { orderId: result.orderId } });
+        // Load Razorpay checkout.js if not loaded
+        if (!window.Razorpay) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://checkout.razorpay.com/v1/checkout.js";
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Failed to load Razorpay"));
+            document.head.appendChild(script);
+          });
+        }
 
-      // Load Razorpay checkout.js if not loaded
-      if (!window.Razorpay) {
         await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://checkout.razorpay.com/v1/checkout.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Failed to load Razorpay"));
-          document.head.appendChild(script);
+          const rzp = new window.Razorpay({
+            key: rzpData.keyId,
+            amount: rzpData.amount,
+            currency: "INR",
+            name: "Murlit Enterprises",
+            description: "Order " + rzpData.orderNumber,
+            order_id: rzpData.razorpayOrderId,
+            handler: async (response: any) => {
+              try {
+                await verifyRazorpayPayment({
+                  data: {
+                    orderId: successOrderId!,
+                    razorpayOrderId: response.razorpay_order_id,
+                    razorpayPaymentId: response.razorpay_payment_id,
+                    razorpaySignature: response.razorpay_signature,
+                  },
+                });
+                invalidateCart();
+                successOrderNumber = rzpData.orderNumber;
+                resolve();
+              } catch (e: any) {
+                reject(e);
+              }
+            },
+            modal: {
+              ondismiss: () => {
+                toast("Payment cancelled. You can retry from your order page.");
+                successOrderNumber = rzpData.orderNumber;
+                resolve();
+              },
+            },
+            prefill: {
+              name: selectedAddress.name,
+              contact: selectedAddress.phone,
+            },
+            theme: { color: "#911e1f" },
+          });
+          rzp.open();
         });
       }
-
-      await new Promise<void>((resolve, reject) => {
-        const rzp = new window.Razorpay({
-          key: rzpData.keyId,
-          amount: rzpData.amount,
-          currency: "INR",
-          name: "Murlit Enterprises",
-          description: "Order " + rzpData.orderNumber,
-          order_id: rzpData.razorpayOrderId,
-          handler: async (response: any) => {
-            try {
-              await verifyRazorpayPayment({
-                data: {
-                  orderId: result.orderId,
-                  razorpayOrderId: response.razorpay_order_id,
-                  razorpayPaymentId: response.razorpay_payment_id,
-                  razorpaySignature: response.razorpay_signature,
-                },
-              });
-              invalidateCart();
-              navigate({ to: "/order/$orderNumber", params: { orderNumber: result.orderNumber } });
-              resolve();
-            } catch (e: any) {
-              reject(e);
-            }
-          },
-          modal: {
-            ondismiss: () => {
-              toast("Payment cancelled. You can retry from your order page.");
-              navigate({ to: "/order/$orderNumber", params: { orderNumber: result.orderNumber } });
-              resolve();
-            },
-          },
-          prefill: {
-            name: selectedAddress.name,
-            contact: selectedAddress.phone,
-          },
-          theme: { color: "#911e1f" },
-        });
-        rzp.open();
-      });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to place order");
+      successOrderNumber = undefined;
     } finally {
       setPlacing(false);
+    }
+    // Navigate AFTER setPlacing(false) to avoid React re-render racing with router transition
+    if (successOrderNumber) {
+      invalidateCart();
+      navigate({ to: "/order/$orderNumber", params: { orderNumber: successOrderNumber } });
     }
   };
 

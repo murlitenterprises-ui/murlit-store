@@ -4,6 +4,21 @@ import { db, orders, orderItems, products, storeSettings, carts, cartItems } fro
 import { eq, and, inArray } from "drizzle-orm";
 import { requireUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
+import { INDIAN_STATES } from "@/lib/india-states";
+
+// Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
+// Accepts: "DL", "Delhi", "07" (GSTIN prefix), "dl" — returns "DL" or the uppercased input as fallback.
+function toPostalCode(raw: string): string {
+  const up = raw.trim().toUpperCase();
+  // Already a 2-letter code?
+  const byCode = INDIAN_STATES.find((s) => s.code === up);
+  if (byCode) return byCode.code;
+  // Full state name?
+  const byName = INDIAN_STATES.find((s) => s.name.toUpperCase() === up);
+  if (byName) return byName.code;
+  // Return as-is (unknown code — let comparison fail gracefully)
+  return up;
+}
 
 // ─── GST helpers ─────────────────────────────────────────────────────────────
 
@@ -89,11 +104,11 @@ export const getCheckoutSummary = createServerFn()
     if (!items.length) return null;
 
     const [settings] = await db.select().from(storeSettings).limit(1);
-    const storeStateCode = settings?.stateCode ?? "MH";
+    const storeStateCode = toPostalCode(settings?.stateCode ?? "MH");
     const shippingFee = settings?.shippingFee ?? 9900;
     const freeShippingAbove = settings?.freeShippingAbove ?? 50000;
 
-    const isSameState = data.shippingStateCode.toUpperCase() === storeStateCode.toUpperCase();
+    const isSameState = toPostalCode(data.shippingStateCode) === storeStateCode;
 
     let subtotal = 0;
     let totalTaxable = 0;
@@ -192,7 +207,7 @@ export const placeOrder = createServerFn()
     }
 
     const [settings] = await db.select().from(storeSettings).limit(1);
-    const storeStateCode = settings?.stateCode ?? "MH";
+    const storeStateCode = toPostalCode(settings?.stateCode ?? "MH");
     const shippingFee = settings?.shippingFee ?? 9900;
     const freeShippingAbove = settings?.freeShippingAbove ?? 50000;
     const invoicePrefix = settings?.invoicePrefix ?? "MUR";
@@ -201,8 +216,7 @@ export const placeOrder = createServerFn()
       throw new Error("Cash on Delivery is not available");
     }
 
-    const isSameState =
-      data.shippingAddress.stateCode.toUpperCase() === storeStateCode.toUpperCase();
+    const isSameState = toPostalCode(data.shippingAddress.stateCode) === storeStateCode;
 
     let subtotal = 0;
     let totalTaxable = 0;

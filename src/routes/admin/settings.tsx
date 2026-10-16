@@ -23,6 +23,7 @@ const schema = z.object({
   stateCode: z.string().min(1, "Required"),
   invoicePrefix: z.string().min(1).max(10),
   pricesIncludeGst: z.boolean(),
+  codEnabled: z.boolean(),
   freeShippingAboveRs: z.number().min(0),
   shippingFeeRs: z.number().min(0),
   whatsappNumber: z.string().optional(),
@@ -50,6 +51,7 @@ function SettingsPage() {
       stateCode: settings?.stateCode ?? "",
       invoicePrefix: settings?.invoicePrefix ?? "MUR",
       pricesIncludeGst: settings?.pricesIncludeGst ?? true,
+      codEnabled: settings?.codEnabled ?? true,
       freeShippingAboveRs: (settings?.freeShippingAbove ?? 50000) / 100,
       shippingFeeRs: (settings?.shippingFee ?? 9900) / 100,
       whatsappNumber: settings?.whatsappNumber ?? "",
@@ -100,12 +102,20 @@ function SettingsPage() {
     </div>
   );
 
+  const watchedState = watch("state");
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Store Settings</h1>
         <p className="text-sm text-gray-500 mt-0.5">GST invoicing and store configuration</p>
       </div>
+
+      {!watchedState && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠️ <strong>Business state not set.</strong> GST type (CGST+SGST vs IGST) cannot be determined for orders until you set the Business State below.
+        </div>
+      )}
 
       {/* Legal */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
@@ -116,7 +126,7 @@ function SettingsPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              State <span className="text-red-500">*</span>
+              Business State (GST-registered) <span className="text-red-500">*</span>
             </label>
             <select
               {...register("state")}
@@ -133,14 +143,16 @@ function SettingsPage() {
               ))}
             </select>
             {errors.state && <p className="text-xs text-red-600 mt-0.5">{errors.state.message}</p>}
+            <p className="text-xs text-gray-400 mt-0.5">Used to determine CGST+SGST vs IGST on orders</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">State Code</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">State Code (auto)</label>
             <input
               {...register("stateCode")}
               readOnly
-              className="w-full rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm"
+              className="w-full rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500"
             />
+            <p className="text-xs text-gray-400 mt-0.5">2-letter ISO code, set automatically</p>
           </div>
         </div>
       </section>
@@ -157,9 +169,13 @@ function SettingsPage() {
 
       {/* Shipping */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Shipping</h2>
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Shipping & Payment</h2>
         <F label="Free Shipping Above (₹)" name="freeShippingAboveRs" type="number" placeholder="500" />
         <F label="Shipping Fee (₹)" name="shippingFeeRs" type="number" placeholder="99" />
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" {...register("codEnabled")} className="rounded" />
+          Cash on Delivery (COD) enabled
+        </label>
       </section>
 
       {/* Contact */}
