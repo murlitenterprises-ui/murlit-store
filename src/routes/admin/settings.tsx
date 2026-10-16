@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormRegister, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getStoreSettings, saveStoreSettings } from "@/fns/admin/settings";
 import { INDIAN_STATES } from "@/lib/india-states";
-import { inrFromPaise } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/settings")({
   loader: () => getStoreSettings(),
@@ -36,6 +35,32 @@ const schema = z.object({
   supportEmail: z.string().email("Invalid email").optional().or(z.literal("")),
 });
 type FormData = z.infer<typeof schema>;
+
+function SettingsField({
+  label, name, type = "text", placeholder, hint, required, register, errors,
+}: {
+  label: string; name: keyof FormData; type?: string;
+  placeholder?: string; hint?: string; required?: boolean;
+  register: UseFormRegister<FormData>;
+  errors: FieldErrors<FormData>;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input
+        type={type}
+        step={type === "number" ? "0.01" : undefined}
+        {...register(name, { valueAsNumber: type === "number" })}
+        placeholder={placeholder}
+        className="w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)] focus:ring-1 focus:ring-[var(--maroon)]"
+      />
+      {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
+      {errors[name] && <p className="text-xs text-red-600 mt-0.5">{(errors[name] as any)?.message}</p>}
+    </div>
+  );
+}
 
 function SettingsPage() {
   const settings = Route.useLoaderData();
@@ -95,28 +120,6 @@ function SettingsPage() {
     }
   };
 
-  const F = ({
-    label, name, type = "text", placeholder, hint, required,
-  }: {
-    label: string; name: keyof FormData; type?: string;
-    placeholder?: string; hint?: string; required?: boolean;
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        step={type === "number" ? "0.01" : undefined}
-        {...register(name, { valueAsNumber: type === "number" })}
-        placeholder={placeholder}
-        className="w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)] focus:ring-1 focus:ring-[var(--maroon)]"
-      />
-      {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
-      {errors[name] && <p className="text-xs text-red-600 mt-0.5">{(errors[name] as any)?.message}</p>}
-    </div>
-  );
-
   const watchedState = watch("state");
   const watchedGstin = watch("gstin");
   const watchedAddressLine1 = watch("addressLine1");
@@ -148,19 +151,19 @@ function SettingsPage() {
       {/* Legal + Business Details */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
         <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Legal & Business Details</h2>
-        <F label="Legal Name" name="legalName" required placeholder="Murlit Enterprises" />
-        <F label="GSTIN" name="gstin" placeholder="08AAAAA0000A1Z5"
-          hint="15-char GST number. First 2 digits must match your state's GST code (Rajasthan = 08)." />
+        <SettingsField label="Legal Name" name="legalName" required placeholder="Murlit Enterprises" register={register} errors={errors} />
+        <SettingsField label="GSTIN" name="gstin" placeholder="08AAAAA0000A1Z5"
+          hint="15-char GST number. First 2 digits must match your state's GST code (Rajasthan = 08)." register={register} errors={errors} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <F label="Address Line 1" name="addressLine1" placeholder="Shop / Building / Street" />
-          <F label="Address Line 2" name="addressLine2" placeholder="Area / Locality (optional)" />
-          <F label="City" name="city" placeholder="Jaipur" />
-          <F label="Pincode" name="pincode" placeholder="302001" hint="6-digit PIN code" />
-          <F label="Business Phone" name="phone" placeholder="+91 98765 43210" />
-          <F label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.in" />
+          <SettingsField label="Address Line 1" name="addressLine1" placeholder="Shop / Building / Street" register={register} errors={errors} />
+          <SettingsField label="Address Line 2" name="addressLine2" placeholder="Area / Locality (optional)" register={register} errors={errors} />
+          <SettingsField label="City" name="city" placeholder="Jaipur" register={register} errors={errors} />
+          <SettingsField label="Pincode" name="pincode" placeholder="302001" hint="6-digit PIN code" register={register} errors={errors} />
+          <SettingsField label="Business Phone" name="phone" placeholder="+91 98765 43210" register={register} errors={errors} />
+          <SettingsField label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.in" register={register} errors={errors} />
         </div>
-        <F label="Registered Address (legacy, used on invoices as fallback)" name="registeredAddress"
-          placeholder="Full one-line address" hint="If Address Line 1/City/Pincode are filled, those are preferred on invoices." />
+        <SettingsField label="Registered Address (legacy, used on invoices as fallback)" name="registeredAddress"
+          placeholder="Full one-line address" hint="If Address Line 1/City/Pincode are filled, those are preferred on invoices." register={register} errors={errors} />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -198,7 +201,7 @@ function SettingsPage() {
       {/* Invoice */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
         <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Invoicing</h2>
-        <F label="Invoice Prefix" name="invoicePrefix" placeholder="MUR" hint="e.g. MUR → MUR/2026-27/0001" />
+        <SettingsField label="Invoice Prefix" name="invoicePrefix" placeholder="MUR" hint="e.g. MUR → MUR/2026-27/0001" register={register} errors={errors} />
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" {...register("pricesIncludeGst")} className="rounded" />
           Product prices include GST
@@ -208,8 +211,8 @@ function SettingsPage() {
       {/* Shipping */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
         <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Shipping & Payment</h2>
-        <F label="Free Shipping Above (₹)" name="freeShippingAboveRs" type="number" placeholder="500" />
-        <F label="Shipping Fee (₹)" name="shippingFeeRs" type="number" placeholder="99" />
+        <SettingsField label="Free Shipping Above (₹)" name="freeShippingAboveRs" type="number" placeholder="500" register={register} errors={errors} />
+        <SettingsField label="Shipping Fee (₹)" name="shippingFeeRs" type="number" placeholder="99" register={register} errors={errors} />
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" {...register("codEnabled")} className="rounded" />
           Cash on Delivery (COD) enabled
@@ -219,8 +222,8 @@ function SettingsPage() {
       {/* Contact */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
         <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Contact</h2>
-        <F label="WhatsApp Number" name="whatsappNumber" placeholder="+919876543210" />
-        <F label="Support Email" name="supportEmail" type="email" placeholder="support@murlit.com" />
+        <SettingsField label="WhatsApp Number" name="whatsappNumber" placeholder="+919876543210" register={register} errors={errors} />
+        <SettingsField label="Support Email" name="supportEmail" type="email" placeholder="support@murlit.com" register={register} errors={errors} />
       </section>
 
       <button
