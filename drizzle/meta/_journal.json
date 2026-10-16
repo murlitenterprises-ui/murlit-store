@@ -15,6 +15,13 @@
       "when": 1792062719160,
       "tag": "0001_far_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792129721747,
+      "tag": "0002_panoramic_power_pack",
+      "breakpoints": true
     }
   ]
 }

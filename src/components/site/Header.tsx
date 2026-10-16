@@ -9,6 +9,8 @@ import { searchProducts, getNavCategories } from "@/fns/catalog";
 import { inrFromPaise } from "@/lib/format";
 import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useCart } from "@/lib/cart-context";
+import { Link as RouterLink } from "@tanstack/react-router";
 
 const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide Shipping", "Diwali Special Collection Live", "WhatsApp Business Enquiries"];
 
@@ -47,6 +49,7 @@ export function Header() {
   busy.current = !!open || mobile;
   const { data: session } = useSession();
   const sessionUser = session?.user;
+  const { count: cartCount } = useCart();
 
   const handleSearchChange = useCallback((q: string) => {
     setSearchQ(q);
@@ -204,7 +207,7 @@ export function Header() {
             <select aria-label="Language" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
               <option>English</option><option>हिन्दी</option>
             </select>
-            <button aria-label="Wishlist" className="hidden h-10 w-10 place-items-center rounded-full hover:bg-sage sm:grid"><Heart className="h-5 w-5" /></button>
+            <RouterLink to="/wishlist" aria-label="Wishlist" className="hidden h-10 w-10 place-items-center rounded-full hover:bg-sage sm:grid"><Heart className="h-5 w-5" /></RouterLink>
             {/* User account dropdown */}
             <div ref={userMenuRef} className="relative hidden sm:block">
               <button
@@ -238,10 +241,12 @@ export function Header() {
                 </div>
               )}
             </div>
-            <button aria-label="Cart" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-sage">
+            <RouterLink to="/cart" aria-label="Cart" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-sage">
               <ShoppingBag className="h-5 w-5" />
-              <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-terracotta text-[9px] font-bold text-on-dark">2</span>
-            </button>
+              {cartCount > 0 && (
+                <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-terracotta text-[9px] font-bold text-on-dark">{cartCount > 99 ? "99+" : cartCount}</span>
+              )}
+            </RouterLink>
           </div>
         </div>
 
@@ -593,19 +598,19 @@ export function Header() {
                 <User style={{ width: 20, height: 20 }} />
                 <span style={{ fontSize: 9 }}>{sessionUser ? "Account" : "Sign In"}</span>
               </button>
-              {[
-                { Icon: Heart,       label: "Wishlist" },
-                { Icon: ShoppingBag, label: "Cart",    badge: "2" },
-              ].map(({ Icon, label, badge }) => (
-                <button key={label} aria-label={label}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
-                  <Icon style={{ width: 20, height: 20 }} />
-                  {badge && (
-                    <span style={{ position: "absolute", top: 0, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--terracotta)", color: "var(--on-dark)", fontSize: 8, display: "grid", placeItems: "center", fontWeight: 700 }}>{badge}</span>
-                  )}
-                  <span style={{ fontSize: 9 }}>{label}</span>
-                </button>
-              ))}
+              <RouterLink to="/wishlist" aria-label="Wishlist" onClick={() => setMobile(false)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                <Heart style={{ width: 20, height: 20 }} />
+                <span style={{ fontSize: 9 }}>Wishlist</span>
+              </RouterLink>
+              <RouterLink to="/cart" aria-label="Cart" onClick={() => setMobile(false)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                <ShoppingBag style={{ width: 20, height: 20 }} />
+                {cartCount > 0 && (
+                  <span style={{ position: "absolute", top: 0, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--terracotta)", color: "var(--on-dark)", fontSize: 8, display: "grid", placeItems: "center", fontWeight: 700 }}>{cartCount > 99 ? "99+" : cartCount}</span>
+                )}
+                <span style={{ fontSize: 9 }}>Cart</span>
+              </RouterLink>
               <a href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer"
                 style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#25D366", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
                 <MessageCircle style={{ width: 15, height: 15 }} />

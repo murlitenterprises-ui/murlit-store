@@ -281,6 +281,7 @@ export const storeSettings = pgTable("store_settings", {
   pricesIncludeGst:   boolean("prices_include_gst").notNull().default(true),
   freeShippingAbove:  integer("free_shipping_above").notNull().default(50000), // paise
   shippingFee:        integer("shipping_fee").notNull().default(9900),          // paise
+  codEnabled:         boolean("cod_enabled").notNull().default(true),
   whatsappNumber:     text("whatsapp_number"),
   supportEmail:       text("support_email"),
   ...timestamps,

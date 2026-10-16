@@ -86,16 +86,22 @@
 - Enquiries / contact-form submissions inbox
 - HSN + GST rate fields visible in product form (already in DB schema)
 
-### Phase 5 — Cart, Wishlist & Checkout
-- Cart: guest (localStorage) + logged-in (DB), merged on login
-- Wishlist (logged-in users)
-- Checkout with saved/new addresses
-- Razorpay integration + Cash on Delivery
-- GST calculation per line:
-  - Store state == shipping state → CGST + SGST (split equally)
-  - Store state != shipping state → IGST
-- Optional customer GSTIN for B2B orders
-- Coupon code support
+### ✅ Phase 5 — Cart, Wishlist, Checkout, GST, Razorpay + COD
+- Real DB-backed cart: guest via `murlit_cart` httpOnly cookie (90-day, sessionKey), user cart via userId; merge on login
+- `src/fns/cart.ts`: resolveCart, getCartItems, getCart, addToCart, updateQty, removeItem, clearCart, mergeGuestCart, getCartCount
+- Wishlist (login required): `src/fns/wishlist.ts` — getWishlist, toggleWishlist, isWishlisted, removeFromWishlist, getWishlistCount
+- Cart UI: `/cart` route with qty +/-, remove, subtotal; badge count in Header; CartProvider in `__root.tsx`
+- Wishlist UI: `/wishlist` route; heart buttons on ProductCard and product page
+- Checkout: `/checkout` — saved/new addresses, GSTIN field for B2B, payment method selection
+- GST: `computeItemGst()` pure helper — priceIncludesGst back-calculates taxable; same state → CGST+SGST; different state → IGST
+- `getCheckoutSummary({ shippingStateCode })` — server-authoritative full breakdown
+- Orders: `placeOrder()` re-validates stock+active from DB, creates `orders` + `order_items`, order number `MUR-100001`+
+- COD: reduces stock + clears cart immediately on placeOrder
+- Razorpay: `createRazorpayOrder()` via Basic auth; `verifyRazorpayPayment()` with HMAC-SHA256 timingSafeEqual; reduces stock + clears cart on verify
+- Razorpay webhook: `server/routes/api/razorpay/webhook.post.ts` — HMAC-SHA256 signature verify, `payment.captured` reduces stock + clears cart
+- Order success page: `/order/$orderNumber` with status, GST breakdown, delivery address, WhatsApp contact
+- `codEnabled` column added to `store_settings` via migration `0002_panoramic_power_pack.sql`
+- Build: ✅ `bun run build` passes
 
 ### Phase 6 — Orders & Invoicing
 - Customer "My Orders" page + order tracking

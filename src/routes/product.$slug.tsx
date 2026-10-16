@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Link } from "@tanstack/react-router";
+import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Heart, ChevronLeft, ChevronRight, Minus, Plus, MessageCircle, Share2 } from "lucide-react";
 import { toast } from "sonner";
@@ -7,6 +7,9 @@ import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { getProductBySlug } from "@/fns/catalog";
 import { inrFromPaise, discountPct } from "@/lib/format";
+import { useCart } from "@/lib/cart-context";
+import { toggleWishlist } from "@/fns/wishlist";
+import { useSession } from "@/lib/auth-client";
 
 const WA_LINK = "https://wa.me/919999999999";
 
@@ -37,7 +40,11 @@ function ProductPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [liked, setLiked] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [tab, setTab] = useState<"description" | "details" | "shipping">("description");
+  const { add } = useCart();
+  const navigate = useNavigate();
+  const { data: session } = useSession();
   const galleryRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef(0);
 
@@ -200,21 +207,42 @@ function ProductPage() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => toast("Cart coming soon — we'll notify you!")}
-                    disabled={product.stock === 0}
+                    onClick={async () => {
+                      if (product.stock === 0) return;
+                      setAdding(true);
+                      try { await add(product.id, qty); } finally { setAdding(false); }
+                    }}
+                    disabled={product.stock === 0 || adding}
                     className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-royal py-3.5 text-sm font-bold text-on-dark transition hover:brightness-110 disabled:opacity-50"
                   >
-                    Add to cart
+                    {adding ? "Adding…" : product.stock === 0 ? "Out of Stock" : "Add to Cart"}
                   </button>
                   <button
-                    onClick={() => toast("Cart coming soon — we'll notify you!")}
-                    disabled={product.stock === 0}
+                    onClick={async () => {
+                      if (product.stock === 0) return;
+                      setAdding(true);
+                      try {
+                        await add(product.id, qty);
+                        navigate({ to: "/cart" });
+                      } finally { setAdding(false); }
+                    }}
+                    disabled={product.stock === 0 || adding}
                     className="flex flex-1 items-center justify-center gap-2 rounded-sm border border-royal py-3.5 text-sm font-bold text-royal transition hover:bg-royal hover:text-on-dark disabled:opacity-50"
                   >
                     Buy Now
                   </button>
                   <button
-                    onClick={() => setLiked((v) => !v)}
+                    onClick={async () => {
+                      if (!session?.user) {
+                        navigate({ to: "/login", search: { redirect: `/product/${product.slug}` } as any });
+                        return;
+                      }
+                      try {
+                        const r = await toggleWishlist({ data: { productId: product.id } });
+                        setLiked(r.wishlisted);
+                        toast(r.wishlisted ? "Added to wishlist" : "Removed from wishlist");
+                      } catch { toast.error("Failed"); }
+                    }}
                     className="grid h-12 w-12 place-items-center rounded-sm border transition hover:border-maroon"
                   >
                     <Heart className={`h-5 w-5 ${liked ? "fill-maroon text-maroon" : "text-ink"}`} />
