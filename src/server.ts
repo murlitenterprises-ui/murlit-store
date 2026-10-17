@@ -2,6 +2,8 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { auth } from "./server/auth";
+import { razorpayWebhookHandler } from "./server/webhook-handler";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -46,6 +48,18 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const { pathname } = new URL(request.url);
+
+    // Handle Better Auth routes before TanStack Start SSR
+    if (pathname.startsWith("/api/auth/")) {
+      return auth.handler(request);
+    }
+
+    // Handle Razorpay webhook
+    if (pathname === "/api/razorpay/webhook" && request.method === "POST") {
+      return razorpayWebhookHandler(request);
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

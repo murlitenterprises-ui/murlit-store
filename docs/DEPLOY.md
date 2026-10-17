@@ -11,8 +11,8 @@
 
 > **Note:** `bun run build:vercel` sets `NITRO_PRESET=vercel` before calling `vite build`,
 > which tells Nitro to output a Vercel-compatible serverless bundle to `.vercel/output/`.
-> The `/api/auth/*` (Better Auth) and `/api/razorpay/webhook` routes are handled by Nitro
-> server routes in `server/routes/` and will be included automatically.
+> All requests — including `/api/auth/*` (Better Auth) and `/api/razorpay/webhook` — are
+> handled inside the single serverless function via the custom server entry in `src/server.ts`.
 
 ---
 
