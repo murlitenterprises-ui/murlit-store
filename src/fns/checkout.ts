@@ -47,6 +47,34 @@ export function computeItemGst(
   }
 }
 
+// ─── Public legal/contact info (for legal pages) ─────────────────────────────
+
+export const getLegalStoreInfo = createServerFn().handler(async () => {
+  const rows = await db
+    .select({
+      legalName:     storeSettings.legalName,
+      addressLine1:  storeSettings.addressLine1,
+      addressLine2:  storeSettings.addressLine2,
+      city:          storeSettings.city,
+      pincode:       storeSettings.pincode,
+      state:         storeSettings.state,
+      phone:         storeSettings.phone,
+      businessEmail: storeSettings.businessEmail,
+      supportEmail:  storeSettings.supportEmail,
+      gstin:         storeSettings.gstin,
+      whatsappNumber: storeSettings.whatsappNumber,
+    })
+    .from(storeSettings)
+    .limit(1);
+  return rows[0] ?? {
+    legalName: "Murlit Enterprises",
+    addressLine1: null, addressLine2: null,
+    city: "Jaipur", pincode: "302001", state: "Rajasthan",
+    phone: null, businessEmail: null, supportEmail: null,
+    gstin: null, whatsappNumber: null,
+  };
+});
+
 // ─── Public store settings (for checkout display) ────────────────────────────
 
 export const getPublicStoreSettings = createServerFn().handler(async () => {
@@ -254,9 +282,12 @@ export const placeOrder = createServerFn()
     const igst = isSameState ? 0 : totalTax;
     const total = subtotal + shipping;
 
-    // Generate order number (sequential, collision-safe enough for now)
-    const count = await db.$count(orders);
-    const orderNumber = `${invoicePrefix}-${String(100001 + Number(count)).padStart(6, "0")}`;
+    // Generate order number from a random UUID segment — guaranteed unique, no race condition.
+    // Format: PREFIX-YYYYMM-XXXXXXXX (e.g. MUR-202610-A1B2C3D4)
+    const now2 = new Date();
+    const yyyymm = `${now2.getFullYear()}${String(now2.getMonth() + 1).padStart(2, "0")}`;
+    const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const orderNumber = `${invoicePrefix}-${yyyymm}-${suffix}`;
 
     // Insert order + items (neon-http doesn't support real transactions, use sequential inserts)
     const [order] = await db

@@ -49,7 +49,8 @@ export const auth = betterAuth({
     secureCookies: !isDev,
   },
   // In dev: dynamically trust any localhost/127.0.0.1 origin regardless of port.
-  // In production: strictly trust only BETTER_AUTH_URL.
+  // In production: trust BETTER_AUTH_URL plus any comma-separated origins in TRUSTED_ORIGINS
+  // (e.g. "https://murlit.com,https://www.murlit.com,https://murlit-store.vercel.app").
   trustedOrigins: isDev
     ? (request: Request | undefined) => {
         const fallback = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
@@ -60,7 +61,13 @@ export const auth = betterAuth({
         }
         return [fallback];
       }
-    : [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
+    : [
+        process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+        ...(process.env.TRUSTED_ORIGINS ?? "")
+          .split(",")
+          .map((o) => o.trim())
+          .filter(Boolean),
+      ],
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
 });

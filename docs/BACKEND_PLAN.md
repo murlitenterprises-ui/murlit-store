@@ -121,14 +121,21 @@
 - Test user `cs-1792127247392@example.com` deleted from DB
 - Build: ✅ `bun run build` passes
 
-### Phase 7 — PWA
-- `manifest.json`, icons
-- Service worker with offline fallback
-- Install prompt
+### ✅ Phase 7 — PWA (done)
+- `public/manifest.webmanifest` — name "Murlit", short_name "Murlit", theme #7c1d1d, background #fdf6ee
+- `public/sw.js` — cache-first for static assets; NEVER caches /api, /admin, /account, /checkout, /cart
+- `public/offline.html` — branded offline fallback page
+- Service worker registered in `__root.tsx` via inline script on `window.load`
+- Manifest linked in `<head>` + `apple-touch-icon` meta; site is installable on Android Chrome
 
-### Phase 8 — Security & Production
-- Auth checks on every admin/server function
-- Input validation (Zod) at all boundaries
-- Rate limiting on forms and auth endpoints
-- Performance audit
-- Vercel production deploy
+### ✅ Phase 8 — Security & Production (done)
+- **Legal pages**: `/privacy-policy`, `/terms`, `/refund-policy`, `/shipping-policy` — all pull business details from `store_settings` server-side; Footer links updated
+- **Vercel build**: `NITRO_PRESET=vercel vite build` targets Vercel serverless. `build:vercel` npm script + `vercel.json` with install/build commands and security headers. Nitro outputs to `.vercel/output/`.
+- **Auth**: `trustedOrigins` in production now includes `BETTER_AUTH_URL` + comma-separated `TRUSTED_ORIGINS` env var (for `murlit.com`, `www.murlit.com`, `murlit-store.vercel.app`)
+- **Security**:
+  - SheetJS upgraded from `xlsx@0.18.5` (vulnerable) to `xlsx@0.20.3` official tarball
+  - Order number race fixed: uses `crypto.randomBytes(4)` → `PREFIX-YYYYMM-XXXXXXXX` (no COUNT(*) race)
+  - All admin server functions call `requireAdmin()`; all customer order/invoice functions check ownership via `eq(orders.userId, user.id)`
+  - Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) added via Nitro middleware (`server/middleware/security-headers.ts`) and `vercel.json`
+  - `bun run build` passes ✅
+- **docs/DEPLOY.md**: full Vercel settings + env var reference with required/optional distinction

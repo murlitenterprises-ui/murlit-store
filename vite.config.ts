@@ -70,12 +70,15 @@ function betterAuthDevMiddleware() {
   };
 }
 
+// When NITRO_PRESET=vercel is set (e.g. on Vercel CI or via `bun run build:vercel`),
+// pass the preset explicitly so Nitro targets the Vercel runtime instead of Cloudflare.
+const nitroPreset = process.env.NITRO_PRESET;
+
 export default defineConfig({
   tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
     server: { entry: "server" },
   },
+  nitro: nitroPreset ? { preset: nitroPreset } : undefined,
   vite: {
     plugins: [betterAuthDevMiddleware()],
   },

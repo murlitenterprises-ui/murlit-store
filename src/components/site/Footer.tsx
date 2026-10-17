@@ -1,12 +1,35 @@
 import { SeoLinks } from "./SeoLinks";
+import { Link } from "@tanstack/react-router";
 import logoFull from "@/assets/logo-full.png";
 import { Instagram, Facebook, Youtube, Linkedin, Phone, Mail, MessageCircle } from "lucide-react";
 
-const cols = [
-  { t: "Shop", l: ["All Products", "New Arrivals", "Best Sellers", "Shop by Occasion", "Pooja & Rituals", "Wedding Essentials", "Handcrafted Collections"] },
-  { t: "Services", l: ["Customized Orders", "B2B / Wholesale", "Gallery / Past Work", "Testimonials", "Blog"] },
-  { t: "Help", l: ["Track Order", "FAQs", "Shipping & Delivery", "Returns & Refunds", "Contact Us"] },
-  { t: "Company", l: ["About Us", "Privacy Policy", "Terms & Conditions"] },
+type NavLink = { label: string; href: string };
+type NavCol  = { t: string; links: NavLink[] };
+
+const cols: NavCol[] = [
+  { t: "Shop", links: [
+    { label: "All Products",          href: "/shop" },
+    { label: "Pooja & Rituals",       href: "/category/pooja-rituals" },
+    { label: "Wedding Essentials",    href: "/category/wedding-essentials" },
+    { label: "Handcrafted Collections", href: "/category/handcrafted" },
+    { label: "Décor",                 href: "/category/decor" },
+  ]},
+  { t: "Services", links: [
+    { label: "Customised Orders",  href: "/#contact" },
+    { label: "B2B / Wholesale",    href: "/#contact" },
+  ]},
+  { t: "Help", links: [
+    { label: "Track Order",         href: "/account" },
+    { label: "Shipping Policy",     href: "/shipping-policy" },
+    { label: "Returns & Refunds",   href: "/refund-policy" },
+    { label: "Contact Us",          href: "/#contact" },
+  ]},
+  { t: "Company", links: [
+    { label: "Privacy Policy",      href: "/privacy-policy" },
+    { label: "Terms & Conditions",  href: "/terms" },
+    { label: "Refund Policy",       href: "/refund-policy" },
+    { label: "Shipping Policy",     href: "/shipping-policy" },
+  ]},
 ];
 
 export function Footer() {
@@ -34,7 +57,17 @@ export function Footer() {
         {cols.map((c) => (
           <div key={c.t}>
             <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-burgundy">{c.t}</h4>
-            <ul className="space-y-2.5 text-sm text-muted-foreground">{c.l.map((l) => <li key={l}><a href="#" className="hover:text-maroon">{l}</a></li>)}</ul>
+            <ul className="space-y-2.5 text-sm text-muted-foreground">
+              {c.links.map((l) => (
+                <li key={l.label}>
+                  {l.href.startsWith("/") && !l.href.includes("#") ? (
+                    <Link to={l.href} className="hover:text-maroon">{l.label}</Link>
+                  ) : (
+                    <a href={l.href} className="hover:text-maroon">{l.label}</a>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         ))}
       </div>
