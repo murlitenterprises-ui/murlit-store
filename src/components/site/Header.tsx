@@ -47,6 +47,83 @@ export function Header() {
   const headerRef = useRef<HTMLElement>(null);
   const busy = useRef(false);
   busy.current = !!open || mobile;
+
+  // Hover-intent timers
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable ref so scroll/click-outside callbacks don't go stale
+  const openRef = useRef<string | null>(null);
+  openRef.current = open;
+
+  const clearMenuTimers = useCallback(() => {
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    clearMenuTimers();
+    closeTimer.current = setTimeout(() => setOpen(null), 200);
+  }, [clearMenuTimers]);
+
+  // Pointer enters a nav item
+  const handleNavEnter = useCallback((mega: string | undefined, e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    clearMenuTimers();
+    if (!mega) {
+      // Non-mega item: close any open menu after delay
+      if (openRef.current) scheduleClose();
+      return;
+    }
+    if (openRef.current) {
+      // Already open: switch instantly
+      setOpen(mega);
+    } else {
+      // Hover-intent: 150 ms before opening
+      openTimer.current = setTimeout(() => setOpen(mega), 150);
+    }
+  }, [clearMenuTimers, scheduleClose]);
+
+  // Pointer leaves a nav item
+  const handleNavLeave = useCallback((mega: string | undefined, e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    if (mega) {
+      scheduleClose(); // panel will cancel if pointer enters it
+    } else {
+      clearMenuTimers();
+    }
+  }, [clearMenuTimers, scheduleClose]);
+
+  // Pointer enters a mega panel: cancel pending close
+  const handlePanelEnter = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    clearMenuTimers();
+  }, [clearMenuTimers]);
+
+  // Pointer leaves a mega panel: schedule close
+  const handlePanelLeave = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    scheduleClose();
+  }, [scheduleClose]);
+
+  // Touch/keyboard: tap or Enter toggles menu
+  const handleNavClick = useCallback((mega: string | undefined, e: React.MouseEvent) => {
+    if (!mega) return;
+    const pe = e.nativeEvent as PointerEvent;
+    if (pe.pointerType === "touch") {
+      if (openRef.current === mega) return; // second tap → let href navigate
+      e.preventDefault();
+      clearMenuTimers();
+      setOpen(mega);
+    }
+  }, [clearMenuTimers]);
+
+  const handleNavKeyDown = useCallback((mega: string | undefined, e: React.KeyboardEvent) => {
+    if (!mega) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen((prev) => (prev === mega ? null : mega));
+    }
+  }, []);
   const { data: session } = useSession();
   const sessionUser = session?.user;
   const { count: cartCount } = useCart();
@@ -98,17 +175,31 @@ export function Header() {
     return () => { document.body.style.overflow = ""; };
   }, [mobile]);
 
-  // Close on Escape
+  // Close mega menu and mobile drawer on Escape
   useEffect(() => {
-    if (!mobile) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobile(false); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setOpen(null); setMobile(false); }
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [mobile]);
+  }, []);
+
+  // Close mega menu on pointer-down outside header
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: PointerEvent) => {
+      if (!headerRef.current?.contains(e.target as Node)) setOpen(null);
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
+  }, [open]);
+
+  // Cleanup timers on unmount
+  useEffect(() => clearMenuTimers, [clearMenuTimers]);
 
   // Close on route change
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  useEffect(() => { setMobile(false); }, [pathname]);
+  useEffect(() => { setMobile(false); setOpen(null); }, [pathname]);
 
   useEffect(() => {
     setScrolled(window.scrollY > 120);
@@ -127,6 +218,7 @@ export function Header() {
         else if (d > 8) setHidden(true);
         else if (d < -8) setHidden(false);
         if (Math.abs(d) > 8 || y < 40) last = y;
+        if (openRef.current && Math.abs(d) > 8) setOpen(null);
         ticking = false;
       });
     };
@@ -150,7 +242,7 @@ export function Header() {
     <>
     {/* Spacer — constant height prevents layout shifts when header compacts */}
     <div aria-hidden="true" className="h-[91px] lg:h-[134px]" />
-    <header ref={headerRef} data-site-header onMouseLeave={() => setOpen(null)}
+    <header ref={headerRef} data-site-header
       className={`fixed top-0 inset-x-0 z-50 bg-background transition-transform duration-300 ease-out motion-reduce:transition-none ${hidden ? "-translate-y-full" : "translate-y-0"}`}>
       {/* Announcement marquee — collapses when scrolled */}
       <div className={`overflow-hidden bg-royal text-on-dark transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[36px]"}`}>
@@ -252,8 +344,17 @@ export function Header() {
 
         <nav className={`container-x hidden items-center justify-center gap-7 lg:flex transition-all duration-300 ${scrolled ? "h-8" : "h-[42px]"}`}>
           {nav.map((n) => (
-            <a key={n.label} href={n.href} onMouseEnter={() => setOpen(n.mega ?? null)}
-              className={`relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}>
+            <a
+              key={n.label}
+              href={n.href}
+              aria-expanded={n.mega ? open === n.mega : undefined}
+              aria-haspopup={n.mega ? "true" : undefined}
+              onPointerEnter={(e) => handleNavEnter(n.mega, e)}
+              onPointerLeave={(e) => handleNavLeave(n.mega, e)}
+              onClick={(e) => handleNavClick(n.mega, e)}
+              onKeyDown={(e) => handleNavKeyDown(n.mega, e)}
+              className={`relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}
+            >
               {n.label}{n.mega && <ChevronDown className="h-3 w-3" />}
               {n.emph && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-leaf" />}
             </a>
@@ -263,7 +364,7 @@ export function Header() {
 
       {/* Shop mega menu */}
       {open === "shop" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x grid grid-cols-4 gap-8 py-8">
             {(navCats.length > 0 ? navCats : shopMenuColumns).map((c) => {
               const isDB = navCats.length > 0;
@@ -280,7 +381,7 @@ export function Header() {
                     <h4 className="font-display text-xl text-maroon">{title}</h4>
                   </div>
                   <ul className="space-y-1.5 text-sm text-muted-foreground">
-                    {links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)}
+                    {links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>)}
                   </ul>
                 </div>
               );
@@ -288,7 +389,7 @@ export function Header() {
           </div>
           <div className="bg-ivory-fade border-t">
             <div className="container-x flex justify-center gap-10 py-3 text-xs font-bold uppercase tracking-widest">
-              {promo.map((p) => <a key={p} href="/shop" className="text-burgundy hover:text-terracotta">{p} →</a>)}
+              {promo.map((p) => <a key={p} href="/shop" onClick={() => setOpen(null)} className="text-burgundy hover:text-terracotta">{p} →</a>)}
             </div>
           </div>
         </div>
@@ -296,7 +397,7 @@ export function Header() {
 
       {/* Wedding mega menu */}
       {open === "wedding" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x max-h-[72vh] overflow-y-auto py-6">
             <div className="grid grid-cols-7 gap-5">
               {/* Wedding Essentials + Wedding Décor & Gifting — from DB or fallback */}
@@ -315,10 +416,10 @@ export function Header() {
                       <ul className="space-y-1 text-xs text-muted-foreground">
                         {isDB
                           ? (c as CategoryTree).children.map((ch) => (
-                              <li key={ch.name}><a href={`/category/${(c as CategoryTree).slug}?sub=${ch.slug}`} className="hover:text-maroon">{ch.name}</a></li>
+                              <li key={ch.name}><a href={`/category/${(c as CategoryTree).slug}?sub=${ch.slug}`} onClick={() => setOpen(null)} className="hover:text-maroon">{ch.name}</a></li>
                             ))
                           : shopMenuColumns.slice(1, 3).find((sc) => sc.slug === (c as any).slug)?.links.map((l) => (
-                              <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>
+                              <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>
                             ))}
                       </ul>
                     </div>
@@ -335,7 +436,7 @@ export function Header() {
                       <div>
                         <h4 className="font-display text-sm text-maroon">{c.title}</h4>
                         <ul className="text-xs text-muted-foreground">
-                          {c.links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)}
+                          {c.links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>)}
                         </ul>
                       </div>
                     </div>
@@ -343,7 +444,7 @@ export function Header() {
                 </div>
               </div>
               {/* Featured card */}
-              <a href="/shop" className="col-span-1 relative overflow-hidden rounded-md min-h-40">
+              <a href="/shop" onClick={() => setOpen(null)} className="col-span-1 relative overflow-hidden rounded-md min-h-40">
                 <img src={img.wedding} alt="" className="h-full w-full object-cover" />
                 <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-burgundy/90 to-transparent p-4 text-on-dark">
                   <span className="text-[10px] uppercase tracking-widest">Featured</span>
@@ -357,7 +458,7 @@ export function Header() {
 
       {/* Crochet mega menu */}
       {open === "crochet" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x py-8">
             {(() => {
               const cat = navCats.find((c) => c.slug === "crochet");
@@ -376,11 +477,11 @@ export function Header() {
                   <div className="flex-1">
                     <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
                       {links.map((l) => (
-                        <a key={l.label} href={l.href} className="hover:text-maroon">{l.label}</a>
+                        <a key={l.label} href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a>
                       ))}
                     </div>
                     <div className="mt-6 border-t pt-4">
-                      <a href="/category/crochet" className="text-sm font-bold text-maroon hover:text-terracotta">View all Crochet →</a>
+                      <a href="/category/crochet" onClick={() => setOpen(null)} className="text-sm font-bold text-maroon hover:text-terracotta">View all Crochet →</a>
                     </div>
                   </div>
                 </div>
@@ -392,7 +493,7 @@ export function Header() {
 
       {/* Pooja & Rituals mega menu */}
       {open === "pooja" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x py-8">
             {(() => {
               const cat = navCats.find((c) => c.slug === "pooja-rituals");
@@ -411,11 +512,11 @@ export function Header() {
                   <div className="flex-1">
                     <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
                       {links.map((l) => (
-                        <a key={l.label} href={l.href} className="hover:text-maroon">{l.label}</a>
+                        <a key={l.label} href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a>
                       ))}
                     </div>
                     <div className="mt-6 border-t pt-4">
-                      <a href="/category/pooja-rituals" className="text-sm font-bold text-maroon hover:text-terracotta">View all Pooja &amp; Rituals →</a>
+                      <a href="/category/pooja-rituals" onClick={() => setOpen(null)} className="text-sm font-bold text-maroon hover:text-terracotta">View all Pooja &amp; Rituals →</a>
                     </div>
                   </div>
                 </div>
