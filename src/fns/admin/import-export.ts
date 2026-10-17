@@ -126,7 +126,7 @@ export interface PreviewRow {
   valid: boolean;
 }
 
-export const previewImport = createServerFn()
+export const previewImport = createServerFn({ method: "POST" })
   .validator(z.object({ fileBase64: z.string(), fileName: z.string() }))
   .handler(async ({ data }): Promise<{ rows: PreviewRow[]; totalValid: number; totalErrors: number }> => {
     await requireAdmin();
@@ -320,7 +320,7 @@ async function uploadImageToCloudinary(url: string): Promise<{ url: string; publ
   }
 }
 
-export const executeImport = createServerFn()
+export const executeImport = createServerFn({ method: "POST" })
   .validator(
     z.object({
       rows: z.array(
@@ -539,7 +539,7 @@ export const exportProducts = createServerFn().handler(async () => {
 
 // ─── Generate error report CSV ────────────────────────────────────────────────
 
-export const generateErrorReport = createServerFn()
+export const generateErrorReport = createServerFn({ method: "POST" })
   .validator(
     z.object({
       rows: z.array(
