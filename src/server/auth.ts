@@ -40,8 +40,8 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24 * 7,
+    expiresIn: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24,       // refresh token once per day (prevents rotation during SSR)
   },
   rateLimit: { enabled: true },
   advanced: {

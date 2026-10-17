@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tansta
 import { redirect } from "@tanstack/react-router";
 import { getCurrentUser } from "@/fns/auth";
 import { signOut } from "@/lib/auth-client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart, Users,
   MessageSquare, Settings, ExternalLink, LogOut, Menu, X, ChevronRight,
@@ -15,6 +15,9 @@ export const Route = createFileRoute("/admin")({
     if ((user as any).role !== "admin") throw redirect({ to: "/" });
     return { adminUser: user };
   },
+  // loader return value is dehydrated by TanStack Start and available via useLoaderData()
+  // beforeLoad context is NOT dehydrated — using loader is the correct pattern
+  loader: ({ context }) => ({ adminUser: (context as any).adminUser }),
   component: AdminLayout,
 });
 
@@ -29,21 +32,12 @@ const navItems = [
 ];
 
 function AdminLayout() {
-  const { adminUser: ctxUser } = Route.useRouteContext();
-  const [sessionUser, setSessionUser] = useState<any>(null);
+  // loader data is dehydrated by TanStack Start — available immediately on client hydration
+  const { adminUser } = Route.useLoaderData();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  // Route context may be empty during initial SSR hydration; fall back to client-side session fetch
-  useEffect(() => {
-    if (ctxUser) return;
-    fetch("/api/auth/get-session", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => { if (d?.user) setSessionUser(d.user); })
-      .catch(() => {});
-  }, [ctxUser]);
-  const adminUser = ctxUser ?? sessionUser;
-  if (!adminUser || (adminUser as any).role !== "admin") return null;
+  // beforeLoad guarantees only admins reach this component; no null-check needed
 
   const handleLogout = async () => {
     await signOut();
