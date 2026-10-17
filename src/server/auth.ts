@@ -39,6 +39,10 @@ export const auth = betterAuth({
       phone: { type: "string", required: false },
     },
   },
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24 * 7,
+  },
   rateLimit: { enabled: true },
   advanced: {
     cookiePrefix: "murlit",

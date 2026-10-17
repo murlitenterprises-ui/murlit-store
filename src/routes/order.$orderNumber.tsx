@@ -49,15 +49,16 @@ function OrderPage() {
   const canCancel = order.paymentMethod === "cod" && order.status === "confirmed";
   const canInvoice = ["confirmed", "packed", "shipped", "delivered"].includes(order.status);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const handleCancel = async () => {
-    if (!confirm("Cancel this order?")) return;
     setCancelling(true);
     try {
       await cancelMyOrder({ data: { orderNumber: order.orderNumber } });
       const fresh = await getMyOrder({ data: { orderNumber: order.orderNumber } });
       setOrder(fresh);
+      setShowCancelConfirm(false);
       toast.success("Order cancelled");
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to cancel order");
@@ -224,14 +225,33 @@ function OrderPage() {
                   {downloadingInvoice ? "Generating…" : "Download Invoice"}
                 </button>
               )}
-              {canCancel && (
+              {canCancel && !showCancelConfirm && (
                 <button
-                  onClick={handleCancel}
-                  disabled={cancelling}
-                  className="flex w-full items-center justify-center gap-2 rounded-sm border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                  onClick={() => setShowCancelConfirm(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-sm border border-red-200 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
                 >
-                  {cancelling ? "Cancelling…" : "Cancel Order"}
+                  Cancel Order
                 </button>
+              )}
+              {canCancel && showCancelConfirm && (
+                <div className="rounded-sm border border-red-200 p-3 space-y-2">
+                  <p className="text-sm font-medium text-red-700">Cancel this order?</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCancel}
+                      disabled={cancelling}
+                      className="flex-1 py-2 text-sm font-semibold bg-red-600 text-white rounded-sm hover:opacity-90 disabled:opacity-50"
+                    >
+                      {cancelling ? "Cancelling…" : "Confirm Cancel"}
+                    </button>
+                    <button
+                      onClick={() => setShowCancelConfirm(false)}
+                      className="flex-1 py-2 text-sm border rounded-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      Keep Order
+                    </button>
+                  </div>
+                </div>
               )}
               <Link
                 to="/shop"

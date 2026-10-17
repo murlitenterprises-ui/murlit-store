@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, useLocation, useNavigate } from "@tansta
 import { redirect } from "@tanstack/react-router";
 import { getCurrentUser } from "@/fns/auth";
 import { signOut } from "@/lib/auth-client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart, Users,
   MessageSquare, Settings, ExternalLink, LogOut, Menu, X, ChevronRight,
@@ -29,10 +29,21 @@ const navItems = [
 ];
 
 function AdminLayout() {
-  const { adminUser } = Route.useRouteContext();
+  const { adminUser: ctxUser } = Route.useRouteContext();
+  const [sessionUser, setSessionUser] = useState<any>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Route context may be empty during initial SSR hydration; fall back to client-side session fetch
+  useEffect(() => {
+    if (ctxUser) return;
+    fetch("/api/auth/get-session", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => { if (d?.user) setSessionUser(d.user); })
+      .catch(() => {});
+  }, [ctxUser]);
+  const adminUser = ctxUser ?? sessionUser;
+  if (!adminUser || (adminUser as any).role !== "admin") return null;
 
   const handleLogout = async () => {
     await signOut();
@@ -46,7 +57,7 @@ function AdminLayout() {
     <nav className="flex flex-col h-full">
       <div className="px-5 py-5 border-b border-white/10">
         <div className="font-display text-xl text-white tracking-wide">Murlit Admin</div>
-        <div className="text-xs text-white/50 mt-0.5 truncate">{adminUser.email}</div>
+        <div className="text-xs text-white/50 mt-0.5 truncate">{adminUser?.email}</div>
       </div>
 
       <ul className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
@@ -136,7 +147,7 @@ function AdminLayout() {
           <span className="text-sm font-medium text-gray-700">
             {navItems.find((n) => isActive(n.to, n.exact))?.label ?? "Admin"}
           </span>
-          <span className="ml-auto text-xs text-gray-400 hidden sm:block">{adminUser.name}</span>
+          <span className="ml-auto text-xs text-gray-400 hidden sm:block">{adminUser?.name}</span>
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6">
           <Outlet />
