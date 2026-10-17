@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, Truck, Package, Globe, MessageCircle, ArrowRight, Check, Quote } from "lucide-react";
 import { Header } from "@/components/site/Header";
@@ -6,9 +6,18 @@ import { CategoryCarousel } from "@/components/site/CategoryCarousel";
 import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { SectionHead, TextLink } from "@/components/site/Section";
-import { categories, img, occasions, products } from "@/lib/catalog";
+import { img, occasions } from "@/lib/catalog";
+import { listProducts, getNavCategories } from "@/fns/catalog";
+import { submitContactEnquiry, submitBulkEnquiry, subscribeNewsletter } from "@/fns/enquiries";
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    const [featured, navCategories] = await Promise.all([
+      listProducts({ data: { featured: true, pageSize: 8 } }),
+      getNavCategories({ data: {} }),
+    ]);
+    return { featured: featured.items, navCategories };
+  },
   head: () => ({
     meta: [
       { title: "Murlit Enterprises — Pooja, Wedding & Handcrafted Gifts" },
@@ -25,6 +34,7 @@ const btnPrimary = `${btn} press bg-royal text-on-dark shadow-lift hover:-transl
 const btnOutline = `${btn} press border border-ink/80 hover:-translate-y-0.5 hover:bg-ink hover:text-on-dark`;
 
 function Home() {
+  const { featured, navCategories } = Route.useLoaderData();
   return (
     <div className="min-h-screen">
       <Header />
@@ -32,17 +42,18 @@ function Home() {
       <main>
         <Hero />
         <Occasions />
-        <Categories />
-        <BestSellers />
+        <Categories navCategories={navCategories} />
+        <BestSellers featured={featured} />
         <ShopByNeed />
         <Custom />
         <WeddingSpot />
-        <Handcrafted />
+        <Handcrafted featured={featured} />
         <B2B />
         <Budget />
         <Recipient />
         <Story />
         <Testimonials />
+        <Contact />
         <Newsletter />
       </main>
       <Footer />
@@ -229,14 +240,30 @@ function Occasions() {
   );
 }
 
-function Categories() {
+function Categories({ navCategories }: { navCategories: import("@/lib/catalog-types").CategoryTree[] }) {
+  const staticExtra = [
+    { name: "Customized", img: img.crochet, href: "/#custom" },
+    { name: "Bulk Orders", img: img.hamper, href: "/#b2b" },
+  ];
   return (
     <section className="py-10 md:py-12 lg:py-16 bg-sage">
       <div className="container-x">
         <SectionHead eyebrow="Shop by Category" title="Curated with devotion" />
         <div className="grid grid-cols-3 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6 lg:gap-5">
-          {categories.map((c) => (
-            <a key={c.name} href="/shop" className="group text-center">
+          {navCategories.map((c) => (
+            <Link key={c.slug} to="/category/$slug" params={{ slug: c.slug }} className="group text-center">
+              <div className="mx-auto h-[110px] w-[110px] lg:h-[170px] lg:w-[170px] overflow-hidden rounded-full border-4 border-background shadow-soft">
+                {c.image ? (
+                  <img src={c.image} alt={c.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-110" />
+                ) : (
+                  <div className="h-full w-full bg-sage-deep" />
+                )}
+              </div>
+              <div className="mt-3 text-[17px] font-medium leading-snug group-hover:text-maroon">{c.name}</div>
+            </Link>
+          ))}
+          {staticExtra.map((c) => (
+            <a key={c.name} href={c.href} className="group text-center">
               <div className="mx-auto h-[110px] w-[110px] lg:h-[170px] lg:w-[170px] overflow-hidden rounded-full border-4 border-background shadow-soft">
                 <img src={c.img} alt={c.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-500 group-hover:scale-110" />
               </div>
@@ -249,13 +276,13 @@ function Categories() {
   );
 }
 
-function BestSellers() {
+function BestSellers({ featured }: { featured: import("@/lib/catalog-types").ProductRow[] }) {
   return (
     <section className="py-10 md:py-12 lg:py-16">
       <div className="container-x">
-        <SectionHead eyebrow="Best Sellers" title="Featured collections" sub="Sample products and prices for this prototype." action={<TextLink>View all products</TextLink>} />
+        <SectionHead eyebrow="Best Sellers" title="Featured collections" action={<TextLink>View all products</TextLink>} />
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {products.slice(0, 8).map((p) => <ProductCard key={p.id} p={p} />)}
+          {featured.map((p) => <ProductCard key={p.id} p={p} />)}
         </div>
       </div>
     </section>
@@ -340,8 +367,9 @@ function WeddingSpot() {
   );
 }
 
-function Handcrafted() {
+function Handcrafted({ featured }: { featured: import("@/lib/catalog-types").ProductRow[] }) {
   const items = ["Crochet Jewellery", "Crochet Varmala", "Handmade Bags", "Keychains", "Table Tops", "Handmade Décor", "Crochet Flowers", "One-of-a-kind Pieces"];
+  const showcase = featured[0];
   return (
     <section id="handcrafted" className="py-10 md:py-12 lg:py-16 bg-ivory">
       <div className="container-x grid gap-8 lg:grid-cols-5">
@@ -355,7 +383,7 @@ function Handcrafted() {
         </div>
         <div className="grid grid-cols-2 gap-4 lg:col-span-3">
           <img src={img.crochet} alt="Crochet varmala and flowers" loading="lazy" decoding="async" className="aspect-[4/5] w-full rounded-md object-cover" />
-          <ProductCard p={products[9]!} />
+          {showcase && <ProductCard p={showcase} />}
         </div>
       </div>
     </section>
@@ -504,17 +532,101 @@ function Testimonials() {
   );
 }
 
+function Contact() {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [errMsg, setErrMsg] = useState("");
+  const honeypotRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !message.trim()) return;
+    setStatus("sending");
+    try {
+      await submitContactEnquiry({ data: { name, phone: phone || undefined, email: email || undefined, message, honeypot: honeypotRef.current?.value ?? "" } });
+      setStatus("done");
+    } catch (err: any) {
+      setErrMsg(err?.message ?? "Something went wrong — please try again.");
+      setStatus("error");
+    }
+  };
+
+  return (
+    <section id="contact" className="py-10 md:py-12 lg:py-16 bg-ivory border-t">
+      <div className="container-x max-w-xl">
+        <SectionHead eyebrow="Get in touch" title="Send us an enquiry" />
+        {status === "done" ? (
+          <div className="mt-6 rounded-md bg-green-50 border border-green-200 px-5 py-4 text-green-800 text-sm font-medium text-center">
+            ✓ Thank you! We'll get back to you within 24 hours.
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {/* Honeypot — hidden from real users */}
+            <input ref={honeypotRef} type="text" name="website" tabIndex={-1} style={{ display: "none" }} aria-hidden="true" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name <span className="text-maroon">*</span></label>
+                <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Message <span className="text-maroon">*</span></label>
+              <textarea value={message} onChange={(e) => setMessage(e.target.value)} required rows={4} placeholder="Tell us what you're looking for…" className="w-full rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon resize-none" />
+            </div>
+            {status === "error" && <p className="text-sm text-red-600">{errMsg}</p>}
+            <button type="submit" disabled={status === "sending"} className={`${btnPrimary} disabled:opacity-60`}>
+              {status === "sending" ? "Sending…" : "Send Enquiry"}
+            </button>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Newsletter() {
+  const [nlEmail, setNlEmail] = useState("");
+  const [nlStatus, setNlStatus] = useState<"idle" | "sending" | "done" | "already">("idle");
+
+  const handleNl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nlEmail) return;
+    setNlStatus("sending");
+    try {
+      const res = await subscribeNewsletter({ data: { email: nlEmail } });
+      setNlStatus(res.alreadySubscribed ? "already" : "done");
+    } catch {
+      setNlStatus("idle");
+    }
+  };
+
   return (
     <section className="py-10 md:py-12 lg:py-16 bg-ivory-fade border-t">
       <div className="container-x max-w-2xl text-center">
         <span className="eyebrow ornament">Stay in touch</span>
         <h2 className="mt-3 text-display font-medium">Discover Something Meaningful.</h2>
         <p className="mt-3 text-[18px] text-muted-foreground">Festive edits, new handcrafted arrivals and early access — once a month.</p>
-        <form className="mx-auto mt-8 flex max-w-md gap-2" onSubmit={(e) => e.preventDefault()}>
-          <input type="email" placeholder="Your email address" className="flex-1 rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
-          <button className={btnPrimary}>Subscribe</button>
-        </form>
+        {nlStatus === "done" ? (
+          <p className="mt-8 text-sm font-semibold text-green-700">✓ You're subscribed! Look out for our next edit.</p>
+        ) : nlStatus === "already" ? (
+          <p className="mt-8 text-sm font-semibold text-amber-700">You're already on the list — we'll see you in the inbox!</p>
+        ) : (
+          <form className="mx-auto mt-8 flex max-w-md gap-2" onSubmit={handleNl}>
+            <input type="email" value={nlEmail} onChange={(e) => setNlEmail(e.target.value)} required placeholder="Your email address" className="flex-1 rounded-sm border bg-background px-4 py-3 text-sm outline-none focus:border-maroon" />
+            <button disabled={nlStatus === "sending"} className={`${btnPrimary} disabled:opacity-60`}>{nlStatus === "sending" ? "…" : "Subscribe"}</button>
+          </form>
+        )}
         <a href="#" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-leaf"><MessageCircle className="h-4 w-4" /> Or enquire on WhatsApp</a>
       </div>
     </section>

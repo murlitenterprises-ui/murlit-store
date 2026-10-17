@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CartProvider } from "@/lib/cart-context";
 import {
   Outlet,
   Link,
@@ -94,6 +95,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/favicon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -199,6 +202,13 @@ function RootShell({ children }: { children: ReactNode }) {
       <body>
         {children}
         <Scripts />
+        <script dangerouslySetInnerHTML={{ __html: `
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+        `.trim() }} />
       </body>
     </html>
   );
@@ -209,10 +219,12 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster position="bottom-right" />
-      <RevealObserver />
+      <CartProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster position="bottom-right" />
+        <RevealObserver />
+      </CartProvider>
     </QueryClientProvider>
   );
 }

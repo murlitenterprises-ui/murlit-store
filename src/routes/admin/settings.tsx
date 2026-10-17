@@ -1,0 +1,238 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useForm, type UseFormRegister, type FieldErrors } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useState } from "react";
+import { toast } from "sonner";
+import { getStoreSettings, saveStoreSettings } from "@/fns/admin/settings";
+import { INDIAN_STATES } from "@/lib/india-states";
+
+export const Route = createFileRoute("/admin/settings")({
+  loader: () => getStoreSettings(),
+  component: SettingsPage,
+});
+
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+const schema = z.object({
+  legalName: z.string().min(1, "Required"),
+  gstin: z.string().regex(GSTIN_RE, "Invalid GSTIN format (15 chars)").optional().or(z.literal("")),
+  registeredAddress: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  pincode: z.string().regex(/^\d{6}$/, "Must be 6 digits").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  businessEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+  state: z.string().min(1, "Required"),
+  stateCode: z.string().min(1, "Required"),
+  invoicePrefix: z.string().min(1).max(10),
+  pricesIncludeGst: z.boolean(),
+  codEnabled: z.boolean(),
+  freeShippingAboveRs: z.number().min(0),
+  shippingFeeRs: z.number().min(0),
+  whatsappNumber: z.string().optional(),
+  supportEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+});
+type FormData = z.infer<typeof schema>;
+
+function SettingsField({
+  label, name, type = "text", placeholder, hint, required, register, errors,
+}: {
+  label: string; name: keyof FormData; type?: string;
+  placeholder?: string; hint?: string; required?: boolean;
+  register: UseFormRegister<FormData>;
+  errors: FieldErrors<FormData>;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input
+        type={type}
+        step={type === "number" ? "0.01" : undefined}
+        {...register(name, { valueAsNumber: type === "number" })}
+        placeholder={placeholder}
+        className="w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)] focus:ring-1 focus:ring-[var(--maroon)]"
+      />
+      {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
+      {errors[name] && <p className="text-xs text-red-600 mt-0.5">{(errors[name] as any)?.message}</p>}
+    </div>
+  );
+}
+
+function SettingsPage() {
+  const settings = Route.useLoaderData();
+  const [saving, setSaving] = useState(false);
+
+  const {
+    register, handleSubmit, watch, setValue, formState: { errors },
+  } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      legalName: settings?.legalName ?? "",
+      gstin: settings?.gstin ?? "",
+      registeredAddress: settings?.registeredAddress ?? "",
+      addressLine1: settings?.addressLine1 ?? "",
+      addressLine2: settings?.addressLine2 ?? "",
+      city: settings?.city ?? "",
+      pincode: settings?.pincode ?? "",
+      phone: settings?.phone ?? "",
+      businessEmail: settings?.businessEmail ?? "",
+      state: settings?.state ?? "",
+      stateCode: settings?.stateCode ?? "",
+      invoicePrefix: settings?.invoicePrefix ?? "MUR",
+      pricesIncludeGst: settings?.pricesIncludeGst ?? true,
+      codEnabled: settings?.codEnabled ?? true,
+      freeShippingAboveRs: (settings?.freeShippingAbove ?? 50000) / 100,
+      shippingFeeRs: (settings?.shippingFee ?? 9900) / 100,
+      whatsappNumber: settings?.whatsappNumber ?? "",
+      supportEmail: settings?.supportEmail ?? "",
+    },
+  });
+
+  const onSubmit = async (data: FormData) => {
+    setSaving(true);
+    try {
+      await saveStoreSettings({
+        data: {
+          ...data,
+          gstin: data.gstin || undefined,
+          addressLine1: data.addressLine1 || undefined,
+          addressLine2: data.addressLine2 || undefined,
+          city: data.city || undefined,
+          pincode: data.pincode || undefined,
+          phone: data.phone || undefined,
+          businessEmail: data.businessEmail || undefined,
+          registeredAddress: data.registeredAddress || undefined,
+          freeShippingAbove: Math.round(data.freeShippingAboveRs * 100),
+          shippingFee: Math.round(data.shippingFeeRs * 100),
+          whatsappNumber: data.whatsappNumber || undefined,
+          supportEmail: data.supportEmail || undefined,
+        },
+      });
+      toast.success("Settings saved");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const watchedState = watch("state");
+  const watchedGstin = watch("gstin");
+  const watchedAddressLine1 = watch("addressLine1");
+  const watchedCity = watch("city");
+  const watchedPincode = watch("pincode");
+
+  const missingInvoiceFields: string[] = [];
+  if (!settings?.gstin && !watchedGstin) missingInvoiceFields.push("GSTIN");
+  if (!settings?.addressLine1 && !watchedAddressLine1) missingInvoiceFields.push("Address Line 1");
+  if (!settings?.city && !watchedCity) missingInvoiceFields.push("City");
+  if (!settings?.pincode && !watchedPincode) missingInvoiceFields.push("Pincode");
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
+      <div>
+        <h1 className="text-xl font-semibold text-gray-900">Store Settings</h1>
+        <p className="text-sm text-gray-500 mt-0.5">GST invoicing and store configuration</p>
+      </div>
+
+      {(!watchedState || missingInvoiceFields.length > 0) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠️ <strong>Incomplete invoice details.</strong>{" "}
+          {!watchedState
+            ? "Business state is not set — GST type cannot be determined."
+            : `Missing: ${missingInvoiceFields.join(", ")}. These will appear blank on tax invoices.`}
+        </div>
+      )}
+
+      {/* Legal + Business Details */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Legal & Business Details</h2>
+        <SettingsField label="Legal Name" name="legalName" required placeholder="Murlit Enterprises" register={register} errors={errors} />
+        <SettingsField label="GSTIN" name="gstin" placeholder="08AAAAA0000A1Z5"
+          hint="15-char GST number. First 2 digits must match your state's GST code (Rajasthan = 08)." register={register} errors={errors} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SettingsField label="Address Line 1" name="addressLine1" placeholder="Shop / Building / Street" register={register} errors={errors} />
+          <SettingsField label="Address Line 2" name="addressLine2" placeholder="Area / Locality (optional)" register={register} errors={errors} />
+          <SettingsField label="City" name="city" placeholder="Jaipur" register={register} errors={errors} />
+          <SettingsField label="Pincode" name="pincode" placeholder="302001" hint="6-digit PIN code" register={register} errors={errors} />
+          <SettingsField label="Business Phone" name="phone" placeholder="+91 98765 43210" register={register} errors={errors} />
+          <SettingsField label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.in" register={register} errors={errors} />
+        </div>
+        <SettingsField label="Registered Address (legacy, used on invoices as fallback)" name="registeredAddress"
+          placeholder="Full one-line address" hint="If Address Line 1/City/Pincode are filled, those are preferred on invoices." register={register} errors={errors} />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Business State (GST-registered) <span className="text-red-500">*</span>
+            </label>
+            <select
+              {...register("state")}
+              onChange={(e) => {
+                const st = INDIAN_STATES.find((s) => s.name === e.target.value);
+                setValue("state", e.target.value);
+                if (st) setValue("stateCode", st.code);
+              }}
+              className="w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--maroon)]"
+            >
+              <option value="">Select state</option>
+              {INDIAN_STATES.map((s) => (
+                <option key={s.code} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+            {errors.state && <p className="text-xs text-red-600 mt-0.5">{errors.state.message}</p>}
+            <p className="text-xs text-gray-400 mt-0.5">Used to determine CGST+SGST vs IGST on orders</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">State Code (auto)</label>
+            <input
+              {...register("stateCode")}
+              readOnly
+              className="w-full rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+            />
+            <p className="text-xs text-gray-400 mt-0.5">2-letter ISO code, set automatically</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Invoice */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Invoicing</h2>
+        <SettingsField label="Invoice Prefix" name="invoicePrefix" placeholder="MUR" hint="e.g. MUR → MUR/2026-27/0001" register={register} errors={errors} />
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" {...register("pricesIncludeGst")} className="rounded" />
+          Product prices include GST
+        </label>
+      </section>
+
+      {/* Shipping */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Shipping & Payment</h2>
+        <SettingsField label="Free Shipping Above (₹)" name="freeShippingAboveRs" type="number" placeholder="500" register={register} errors={errors} />
+        <SettingsField label="Shipping Fee (₹)" name="shippingFeeRs" type="number" placeholder="99" register={register} errors={errors} />
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" {...register("codEnabled")} className="rounded" />
+          Cash on Delivery (COD) enabled
+        </label>
+      </section>
+
+      {/* Contact */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Contact</h2>
+        <SettingsField label="WhatsApp Number" name="whatsappNumber" placeholder="+919876543210" register={register} errors={errors} />
+        <SettingsField label="Support Email" name="supportEmail" type="email" placeholder="support@murlit.com" register={register} errors={errors} />
+      </section>
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded bg-[var(--maroon)] px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 transition-opacity"
+      >
+        {saving ? "Saving…" : "Save Settings"}
+      </button>
+    </form>
+  );
+}

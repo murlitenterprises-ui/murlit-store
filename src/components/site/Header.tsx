@@ -1,10 +1,16 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle, LogOut, Settings } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
 import logoCompact from "@/assets/logo-compact.png";
+import { searchProducts, getNavCategories } from "@/fns/catalog";
+import { inrFromPaise } from "@/lib/format";
+import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
+import { useSession, signOut } from "@/lib/auth-client";
+import { useCart } from "@/lib/cart-context";
+import { Link as RouterLink } from "@tanstack/react-router";
 
 const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide Shipping", "Diwali Special Collection Live", "WhatsApp Business Enquiries"];
 
@@ -29,12 +35,139 @@ export function Header() {
   const [hidden, setHidden] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState<ProductRow[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [navCats, setNavCats] = useState<CategoryTree[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
   const headerRef = useRef<HTMLElement>(null);
   const busy = useRef(false);
   busy.current = !!open || mobile;
 
+  // Hover-intent timers
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable ref so scroll/click-outside callbacks don't go stale
+  const openRef = useRef<string | null>(null);
+  openRef.current = open;
+
+  const clearMenuTimers = useCallback(() => {
+    if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    clearMenuTimers();
+    closeTimer.current = setTimeout(() => setOpen(null), 200);
+  }, [clearMenuTimers]);
+
+  // Pointer enters a nav item
+  const handleNavEnter = useCallback((mega: string | undefined, e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    clearMenuTimers();
+    if (!mega) {
+      // Non-mega item: close any open menu after delay
+      if (openRef.current) scheduleClose();
+      return;
+    }
+    if (openRef.current) {
+      // Already open: switch instantly
+      setOpen(mega);
+    } else {
+      // Hover-intent: 150 ms before opening
+      openTimer.current = setTimeout(() => setOpen(mega), 150);
+    }
+  }, [clearMenuTimers, scheduleClose]);
+
+  // Pointer leaves a nav item
+  const handleNavLeave = useCallback((mega: string | undefined, e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    if (mega) {
+      scheduleClose(); // panel will cancel if pointer enters it
+    } else {
+      clearMenuTimers();
+    }
+  }, [clearMenuTimers, scheduleClose]);
+
+  // Pointer enters a mega panel: cancel pending close
+  const handlePanelEnter = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    clearMenuTimers();
+  }, [clearMenuTimers]);
+
+  // Pointer leaves a mega panel: schedule close
+  const handlePanelLeave = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    scheduleClose();
+  }, [scheduleClose]);
+
+  // Touch/keyboard: tap or Enter toggles menu
+  const handleNavClick = useCallback((mega: string | undefined, e: React.MouseEvent) => {
+    if (!mega) return;
+    const pe = e.nativeEvent as PointerEvent;
+    if (pe.pointerType === "touch") {
+      if (openRef.current === mega) return; // second tap → let href navigate
+      e.preventDefault();
+      clearMenuTimers();
+      setOpen(mega);
+    }
+  }, [clearMenuTimers]);
+
+  const handleNavKeyDown = useCallback((mega: string | undefined, e: React.KeyboardEvent) => {
+    if (!mega) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen((prev) => (prev === mega ? null : mega));
+    }
+  }, []);
+  const { data: session } = useSession();
+  const sessionUser = session?.user;
+  const { count: cartCount } = useCart();
+
+  const handleSearchChange = useCallback((q: string) => {
+    setSearchQ(q);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    if (!q.trim()) { setSearchResults([]); setSearchOpen(false); return; }
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const results = await searchProducts({ data: { q: q.trim(), limit: 8 } });
+        setSearchResults(results);
+        setSearchOpen(results.length > 0);
+      } catch { /* ignore */ }
+    }, 300);
+  }, []);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searchQ.trim()) {
+      setSearchOpen(false);
+      navigate({ to: "/shop", search: { q: searchQ.trim() } as any });
+    }
+    if (e.key === "Escape") { setSearchOpen(false); setSearchQ(""); }
+  };
+
   // SSR safety: portal only available after mount
   useEffect(() => { setMounted(true); }, []);
+
+  // Load nav categories from DB on mount
+  useEffect(() => {
+    getNavCategories().then((cats) => { if (cats?.length) setNavCats(cats); }).catch(() => {});
+  }, []);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [userMenuOpen]);
 
   // Lock body scroll while drawer is open
   useEffect(() => {
@@ -42,17 +175,31 @@ export function Header() {
     return () => { document.body.style.overflow = ""; };
   }, [mobile]);
 
-  // Close on Escape
+  // Close mega menu and mobile drawer on Escape
   useEffect(() => {
-    if (!mobile) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobile(false); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setOpen(null); setMobile(false); }
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [mobile]);
+  }, []);
+
+  // Close mega menu on pointer-down outside header
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: PointerEvent) => {
+      if (!headerRef.current?.contains(e.target as Node)) setOpen(null);
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
+  }, [open]);
+
+  // Cleanup timers on unmount
+  useEffect(() => clearMenuTimers, [clearMenuTimers]);
 
   // Close on route change
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  useEffect(() => { setMobile(false); }, [pathname]);
+  useEffect(() => { setMobile(false); setOpen(null); }, [pathname]);
 
   useEffect(() => {
     setScrolled(window.scrollY > 120);
@@ -71,6 +218,7 @@ export function Header() {
         else if (d > 8) setHidden(true);
         else if (d < -8) setHidden(false);
         if (Math.abs(d) > 8 || y < 40) last = y;
+        if (openRef.current && Math.abs(d) > 8) setOpen(null);
         ticking = false;
       });
     };
@@ -94,7 +242,7 @@ export function Header() {
     <>
     {/* Spacer — constant height prevents layout shifts when header compacts */}
     <div aria-hidden="true" className="h-[91px] lg:h-[134px]" />
-    <header ref={headerRef} data-site-header onMouseLeave={() => setOpen(null)}
+    <header ref={headerRef} data-site-header
       className={`fixed top-0 inset-x-0 z-50 bg-background transition-transform duration-300 ease-out motion-reduce:transition-none ${hidden ? "-translate-y-full" : "translate-y-0"}`}>
       {/* Announcement marquee — collapses when scrolled */}
       <div className={`overflow-hidden bg-royal text-on-dark transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[36px]"}`}>
@@ -110,11 +258,40 @@ export function Header() {
           <Link to="/" aria-label="Murlit Enterprises — Home" className="shrink-0">
             <img src={logoCompact} alt="Murlit Enterprises" width={1174} height={829} className={`w-auto object-contain transition-all duration-300 ${scrolled ? "h-8 lg:h-9" : "h-10 lg:h-12"}`} />
           </Link>
-          <label className="relative hidden flex-1 md:block">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input placeholder="Search kits, mala, potli, wedding items..."
-              className="w-full rounded-full border bg-sage py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background" />
-          </label>
+          <div ref={searchRef} className="relative hidden flex-1 md:block">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={searchQ}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              placeholder="Search kits, mala, potli, wedding items..."
+              className="w-full rounded-full border bg-sage py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-maroon focus:bg-background"
+            />
+            {searchOpen && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-background shadow-lift">
+                {searchResults.map((r) => (
+                  <Link
+                    key={r.id}
+                    to="/product/$slug"
+                    params={{ slug: r.slug }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setSearchOpen(false); setSearchQ(""); }}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-sage"
+                  >
+                    {r.imageUrl && (
+                      <img src={r.imageUrl} alt="" className="h-10 w-10 rounded-sm object-cover shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{r.name}</div>
+                      <div className="text-xs text-muted-foreground">{inrFromPaise(r.price)}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="ml-auto flex items-center gap-1 md:gap-3">
             <select aria-label="Currency" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
               <option>INR ₹</option><option>USD $</option><option>GBP £</option><option>EUR €</option><option>AED</option>
@@ -122,20 +299,62 @@ export function Header() {
             <select aria-label="Language" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
               <option>English</option><option>हिन्दी</option>
             </select>
-            {[User, Heart].map((I, i) => (
-              <button key={i} aria-label={i ? "Wishlist" : "Account"} className="hidden h-10 w-10 place-items-center rounded-full hover:bg-sage sm:grid"><I className="h-5 w-5" /></button>
-            ))}
-            <button aria-label="Cart" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-sage">
+            <RouterLink to="/wishlist" aria-label="Wishlist" className="hidden h-10 w-10 place-items-center rounded-full hover:bg-sage sm:grid"><Heart className="h-5 w-5" /></RouterLink>
+            {/* User account dropdown */}
+            <div ref={userMenuRef} className="relative hidden sm:block">
+              <button
+                aria-label="Account"
+                onClick={() => {
+                  if (!sessionUser) { navigate({ to: "/login" }); }
+                  else setUserMenuOpen((v) => !v);
+                }}
+                className="h-10 w-10 place-items-center rounded-full hover:bg-sage grid"
+              >
+                <User className="h-5 w-5" />
+              </button>
+              {sessionUser && userMenuOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-sm border bg-background shadow-lift py-1">
+                  <div className="px-4 py-2 border-b">
+                    <p className="text-sm font-semibold truncate">{sessionUser.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{sessionUser.email}</p>
+                  </div>
+                  <a href="/account" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-sage">My Account</a>
+                  <a href="/account?tab=orders" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-sage">My Orders</a>
+                  {(sessionUser as any).role === "admin" && (
+                    <a href="/admin" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-sage text-maroon font-medium"><Settings className="h-3.5 w-3.5" />Admin Panel</a>
+                  )}
+                  <div className="border-t my-1" />
+                  <button
+                    onClick={async () => { setUserMenuOpen(false); await signOut(); navigate({ to: "/" }); }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-sage text-left"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />Logout
+                  </button>
+                </div>
+              )}
+            </div>
+            <RouterLink to="/cart" aria-label="Cart" className="relative grid h-10 w-10 place-items-center rounded-full hover:bg-sage">
               <ShoppingBag className="h-5 w-5" />
-              <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-terracotta text-[9px] font-bold text-on-dark">2</span>
-            </button>
+              {cartCount > 0 && (
+                <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-terracotta text-[9px] font-bold text-on-dark">{cartCount > 99 ? "99+" : cartCount}</span>
+              )}
+            </RouterLink>
           </div>
         </div>
 
         <nav className={`container-x hidden items-center justify-center gap-7 lg:flex transition-all duration-300 ${scrolled ? "h-8" : "h-[42px]"}`}>
           {nav.map((n) => (
-            <a key={n.label} href={n.href} onMouseEnter={() => setOpen(n.mega ?? null)}
-              className={`relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}>
+            <a
+              key={n.label}
+              href={n.href}
+              aria-expanded={n.mega ? open === n.mega : undefined}
+              aria-haspopup={n.mega ? "true" : undefined}
+              onPointerEnter={(e) => handleNavEnter(n.mega, e)}
+              onPointerLeave={(e) => handleNavLeave(n.mega, e)}
+              onClick={(e) => handleNavClick(n.mega, e)}
+              onKeyDown={(e) => handleNavKeyDown(n.mega, e)}
+              className={`relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100 ${n.emph ? "text-terracotta" : ""}`}
+            >
               {n.label}{n.mega && <ChevronDown className="h-3 w-3" />}
               {n.emph && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-leaf" />}
             </a>
@@ -143,49 +362,71 @@ export function Header() {
         </nav>
       </div>
 
-      {/* Shop mega menu — unchanged */}
+      {/* Shop mega menu */}
       {open === "shop" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x grid grid-cols-4 gap-8 py-8">
-            {shopMenuColumns.map((c) => (
-              <div key={c.title}>
-                <div className="mb-4 flex items-center gap-3">
-                  <img src={c.img} alt="" className="h-12 w-12 rounded-sm object-cover" />
-                  <h4 className="font-display text-xl text-maroon">{c.title}</h4>
+            {(navCats.length > 0 ? navCats : shopMenuColumns).map((c) => {
+              const isDB = navCats.length > 0;
+              const title = isDB ? (c as CategoryTree).name : (c as typeof shopMenuColumns[0]).title;
+              const catImg = isDB ? ((c as CategoryTree).image ?? "") : (c as typeof shopMenuColumns[0]).img;
+              const slug = isDB ? (c as CategoryTree).slug : (c as typeof shopMenuColumns[0]).slug;
+              const links = isDB
+                ? (c as CategoryTree).children.map((ch) => ({ label: ch.name, href: `/category/${slug}?sub=${ch.slug}` }))
+                : (c as typeof shopMenuColumns[0]).links.map((l) => ({ label: l.label, href: l.href }));
+              return (
+                <div key={title}>
+                  <div className="mb-4 flex items-center gap-3">
+                    {catImg && <img src={catImg} alt="" className="h-12 w-12 rounded-sm object-cover" />}
+                    <h4 className="font-display text-xl text-maroon">{title}</h4>
+                  </div>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    {links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>)}
+                  </ul>
                 </div>
-                <ul className="space-y-1.5 text-sm text-muted-foreground">
-                  {c.links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)}
-                </ul>
-                {c.sub && <p className="mt-3 rounded-sm bg-sage p-3 text-xs leading-relaxed text-muted-foreground"><b className="text-ink">Kits for: </b>{c.sub}</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="bg-ivory-fade border-t">
             <div className="container-x flex justify-center gap-10 py-3 text-xs font-bold uppercase tracking-widest">
-              {promo.map((p) => <a key={p} href="/shop" className="text-burgundy hover:text-terracotta">{p} →</a>)}
+              {promo.map((p) => <a key={p} href="/shop" onClick={() => setOpen(null)} className="text-burgundy hover:text-terracotta">{p} →</a>)}
             </div>
           </div>
         </div>
       )}
 
-      {/* Wedding mega menu — expanded with product columns */}
+      {/* Wedding mega menu */}
       {open === "wedding" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x max-h-[72vh] overflow-y-auto py-6">
             <div className="grid grid-cols-7 gap-5">
-              {/* New: Wedding Essentials + Wedding Décor & Gifting */}
-              {shopMenuColumns.slice(1, 3).map((c) => (
-                <div key={c.title} className="col-span-1">
-                  <div className="mb-3 flex items-center gap-2">
-                    <img src={c.img} alt="" className="h-10 w-10 rounded-sm object-cover" />
-                    <h4 className="font-display text-base text-maroon">{c.title}</h4>
-                  </div>
-                  <ul className="space-y-1 text-xs text-muted-foreground">
-                    {c.links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)}
-                  </ul>
-                </div>
-              ))}
-              {/* Existing occasion grid */}
+              {/* Wedding Essentials + Wedding Décor & Gifting — from DB or fallback */}
+              {(() => {
+                const weddingCats = navCats.length > 0
+                  ? navCats.filter((c) => c.slug === "wedding-essentials" || c.slug === "wedding-decor-gifting")
+                  : shopMenuColumns.slice(1, 3).map((c) => ({ name: c.title, slug: c.slug ?? "", image: c.img, children: c.links.map((l) => ({ name: l.label, slug: l.subSlug, href: l.href })) }));
+                return weddingCats.map((c) => {
+                  const isDB = navCats.length > 0;
+                  return (
+                    <div key={(c as any).name || (c as any).title} className="col-span-1">
+                      <div className="mb-3 flex items-center gap-2">
+                        {(c as any).image && <img src={(c as any).image} alt="" className="h-10 w-10 rounded-sm object-cover" />}
+                        <h4 className="font-display text-base text-maroon">{(c as any).name}</h4>
+                      </div>
+                      <ul className="space-y-1 text-xs text-muted-foreground">
+                        {isDB
+                          ? (c as CategoryTree).children.map((ch) => (
+                              <li key={ch.name}><a href={`/category/${(c as CategoryTree).slug}?sub=${ch.slug}`} onClick={() => setOpen(null)} className="hover:text-maroon">{ch.name}</a></li>
+                            ))
+                          : shopMenuColumns.slice(1, 3).find((sc) => sc.slug === (c as any).slug)?.links.map((l) => (
+                              <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>
+                            ))}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
+              {/* Occasion grid — static weddingMenuColumns as occasion display */}
               <div className="col-span-4 border-l pl-5">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">By Occasion</p>
                 <div className="grid grid-cols-4 gap-x-5 gap-y-4">
@@ -195,16 +436,15 @@ export function Header() {
                       <div>
                         <h4 className="font-display text-sm text-maroon">{c.title}</h4>
                         <ul className="text-xs text-muted-foreground">
-                          {c.links.map((l) => <li key={l.label}><a href={l.href} className="hover:text-maroon">{l.label}</a></li>)}
+                          {c.links.map((l) => <li key={l.label}><a href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a></li>)}
                         </ul>
-
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
               {/* Featured card */}
-              <a href="/shop" className="col-span-1 relative overflow-hidden rounded-md min-h-40">
+              <a href="/shop" onClick={() => setOpen(null)} className="col-span-1 relative overflow-hidden rounded-md min-h-40">
                 <img src={img.wedding} alt="" className="h-full w-full object-cover" />
                 <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-burgundy/90 to-transparent p-4 text-on-dark">
                   <span className="text-[10px] uppercase tracking-widest">Featured</span>
@@ -218,50 +458,70 @@ export function Header() {
 
       {/* Crochet mega menu */}
       {open === "crochet" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x py-8">
-            <div className="flex gap-8">
-              <div className="shrink-0">
-                <img src={shopMenuColumns[4].img} alt="" className="h-40 w-40 rounded-sm object-cover" />
-                <h4 className="mt-3 font-display text-xl text-maroon">{shopMenuColumns[4].title}</h4>
-              </div>
-              <div className="flex-1">
-                <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
-                  {shopMenuColumns[4].links.map((l) => (
-                    <a key={l.label} href={l.href} className="hover:text-maroon">{l.label}</a>
-                  ))}
+            {(() => {
+              const cat = navCats.find((c) => c.slug === "crochet");
+              const fallback = shopMenuColumns[4];
+              const title = cat ? cat.name : fallback.title;
+              const catImg = cat?.image ?? fallback.img;
+              const links = cat
+                ? cat.children.map((ch) => ({ label: ch.name, href: `/category/crochet?sub=${ch.slug}` }))
+                : fallback.links.map((l) => ({ label: l.label, href: l.href }));
+              return (
+                <div className="flex gap-8">
+                  <div className="shrink-0">
+                    {catImg && <img src={catImg} alt="" className="h-40 w-40 rounded-sm object-cover" />}
+                    <h4 className="mt-3 font-display text-xl text-maroon">{title}</h4>
+                  </div>
+                  <div className="flex-1">
+                    <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
+                      {links.map((l) => (
+                        <a key={l.label} href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a>
+                      ))}
+                    </div>
+                    <div className="mt-6 border-t pt-4">
+                      <a href="/category/crochet" onClick={() => setOpen(null)} className="text-sm font-bold text-maroon hover:text-terracotta">View all Crochet →</a>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-6 border-t pt-4">
-                  <a href="/category/crochet" className="text-sm font-bold text-maroon hover:text-terracotta">View all Crochet →</a>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}
 
       {/* Pooja & Rituals mega menu */}
       {open === "pooja" && (
-        <div className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
+        <div onPointerEnter={handlePanelEnter} onPointerLeave={handlePanelLeave} className="absolute inset-x-0 top-full hidden border-b bg-background shadow-lift animate-menu-in lg:block">
           <div className="container-x py-8">
-            <div className="flex gap-8">
-              {/* Category image + title */}
-              <div className="shrink-0">
-                <img src={shopMenuColumns[0].img} alt="" className="h-40 w-40 rounded-sm object-cover" />
-                <h4 className="mt-3 font-display text-xl text-maroon">{shopMenuColumns[0].title}</h4>
-              </div>
-              {/* Links in 3 columns */}
-              <div className="flex-1">
-                <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
-                  {shopMenuColumns[0].links.map((l) => (
-                    <a key={l.label} href={l.href} className="hover:text-maroon">{l.label}</a>
-                  ))}
+            {(() => {
+              const cat = navCats.find((c) => c.slug === "pooja-rituals");
+              const fallback = shopMenuColumns[0];
+              const title = cat ? cat.name : fallback.title;
+              const catImg = cat?.image ?? fallback.img;
+              const links = cat
+                ? cat.children.map((ch) => ({ label: ch.name, href: `/category/pooja-rituals?sub=${ch.slug}` }))
+                : fallback.links.map((l) => ({ label: l.label, href: l.href }));
+              return (
+                <div className="flex gap-8">
+                  <div className="shrink-0">
+                    {catImg && <img src={catImg} alt="" className="h-40 w-40 rounded-sm object-cover" />}
+                    <h4 className="mt-3 font-display text-xl text-maroon">{title}</h4>
+                  </div>
+                  <div className="flex-1">
+                    <div className="grid grid-cols-3 gap-x-8 gap-y-2 text-sm text-muted-foreground">
+                      {links.map((l) => (
+                        <a key={l.label} href={l.href} onClick={() => setOpen(null)} className="hover:text-maroon">{l.label}</a>
+                      ))}
+                    </div>
+                    <div className="mt-6 border-t pt-4">
+                      <a href="/category/pooja-rituals" onClick={() => setOpen(null)} className="text-sm font-bold text-maroon hover:text-terracotta">View all Pooja &amp; Rituals →</a>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-6 border-t pt-4">
-                  <a href="/category/pooja-rituals" className="text-sm font-bold text-maroon hover:text-terracotta">View all Pooja &amp; Rituals →</a>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -324,8 +584,8 @@ export function Header() {
               [
                 { label: "Shop",             mega: "shop",    rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
                 { label: "Wedding",          mega: "wedding", rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
-                { label: "Pooja & Rituals",  mega: "pooja",   rowImg: shopMenuColumns[0].img, href: "/category/pooja-rituals",  viewAll: "/category/pooja-rituals" },
-                { label: "Handcrafted",      mega: "crochet", rowImg: shopMenuColumns[4].img, href: "/category/crochet",        viewAll: "/category/crochet" },
+                { label: "Pooja & Rituals",  mega: "pooja",   rowImg: navCats.find(c => c.slug === "pooja-rituals")?.image ?? shopMenuColumns[0].img, href: "/category/pooja-rituals",  viewAll: "/category/pooja-rituals" },
+                { label: "Handcrafted",      mega: "crochet", rowImg: navCats.find(c => c.slug === "crochet")?.image ?? shopMenuColumns[4].img, href: "/category/crochet",        viewAll: "/category/crochet" },
               ] as const
             ).map((n, idx) => {
               const isOpen = mExp === n.label;
@@ -334,13 +594,24 @@ export function Header() {
               type Sub = { label: string; img: string; href: string };
               let subs: Sub[] = [];
               if (n.mega === "shop") {
-                subs = shopMenuColumns.slice(0, 5).map((c) => ({ label: c.title, img: c.img, href: c.slug ? `/category/${c.slug}` : "/shop" }));
+                subs = navCats.length > 0
+                  ? navCats.slice(0, 5).map((c) => ({ label: c.name, img: c.image ?? img.wedding, href: `/category/${c.slug}` }))
+                  : shopMenuColumns.slice(0, 5).map((c) => ({ label: c.title, img: c.img, href: c.slug ? `/category/${c.slug}` : "/shop" }));
               } else if (n.mega === "wedding") {
-                subs = weddingMenuColumns.slice(0, 9).map((c) => ({ label: c.title, img: c.img, href: c.links[0]?.href ?? "/shop" }));
+                const wCats = navCats.filter((c) => c.slug === "wedding-essentials" || c.slug === "wedding-decor-gifting");
+                subs = wCats.length > 0
+                  ? wCats.flatMap((c) => c.children.slice(0, 5).map((ch) => ({ label: ch.name, img: ch.image ?? img.wedding, href: `/category/${c.slug}?sub=${ch.slug}` }))).slice(0, 9)
+                  : weddingMenuColumns.slice(0, 9).map((c) => ({ label: c.title, img: c.img, href: c.links[0]?.href ?? "/shop" }));
               } else if (n.mega === "pooja") {
-                subs = shopMenuColumns[0].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
+                const pCat = navCats.find((c) => c.slug === "pooja-rituals");
+                subs = pCat
+                  ? pCat.children.slice(0, 9).map((ch) => ({ label: ch.name, img: ch.image ?? img.poojakit, href: `/category/pooja-rituals?sub=${ch.slug}` }))
+                  : shopMenuColumns[0].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
               } else {
-                subs = shopMenuColumns[4].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
+                const crCat = navCats.find((c) => c.slug === "crochet");
+                subs = crCat
+                  ? crCat.children.slice(0, 9).map((ch) => ({ label: ch.name, img: ch.image ?? img.crochet, href: `/category/crochet?sub=${ch.slug}` }))
+                  : shopMenuColumns[4].links.slice(0, 9).map((l) => ({ label: l.label, img: l.img, href: l.href }));
               }
 
               return (
@@ -415,20 +686,32 @@ export function Header() {
             </div>
             {/* Icons + WhatsApp */}
             <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 10px" }}>
-              {[
-                { Icon: User,        label: "Account"  },
-                { Icon: Heart,       label: "Wishlist" },
-                { Icon: ShoppingBag, label: "Cart",    badge: "2" },
-              ].map(({ Icon, label, badge }) => (
-                <button key={label} aria-label={label}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
-                  <Icon style={{ width: 20, height: 20 }} />
-                  {badge && (
-                    <span style={{ position: "absolute", top: 0, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--terracotta)", color: "var(--on-dark)", fontSize: 8, display: "grid", placeItems: "center", fontWeight: 700 }}>{badge}</span>
-                  )}
-                  <span style={{ fontSize: 9 }}>{label}</span>
-                </button>
-              ))}
+              {/* Account button */}
+              <button
+                aria-label="Account"
+                onClick={() => {
+                  setMobile(false);
+                  if (!sessionUser) navigate({ to: "/login" });
+                  else navigate({ to: "/account" });
+                }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}
+              >
+                <User style={{ width: 20, height: 20 }} />
+                <span style={{ fontSize: 9 }}>{sessionUser ? "Account" : "Sign In"}</span>
+              </button>
+              <RouterLink to="/wishlist" aria-label="Wishlist" onClick={() => setMobile(false)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                <Heart style={{ width: 20, height: 20 }} />
+                <span style={{ fontSize: 9 }}>Wishlist</span>
+              </RouterLink>
+              <RouterLink to="/cart" aria-label="Cart" onClick={() => setMobile(false)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "4px 10px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                <ShoppingBag style={{ width: 20, height: 20 }} />
+                {cartCount > 0 && (
+                  <span style={{ position: "absolute", top: 0, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--terracotta)", color: "var(--on-dark)", fontSize: 8, display: "grid", placeItems: "center", fontWeight: 700 }}>{cartCount > 99 ? "99+" : cartCount}</span>
+                )}
+                <span style={{ fontSize: 9 }}>Cart</span>
+              </RouterLink>
               <a href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer"
                 style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#25D366", color: "#fff", borderRadius: 100, padding: "8px 14px", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
                 <MessageCircle style={{ width: 15, height: 15 }} />

@@ -16,6 +16,9 @@ dist-ssr
 .nitro
 *.local
 
+# Vercel / deployment outputs
+.vercel/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
@@ -32,3 +35,7 @@ dist-ssr
 *.sw?
 screens/
 pw-*.mjs
+
+# Environment secrets
+.env
+.env.production

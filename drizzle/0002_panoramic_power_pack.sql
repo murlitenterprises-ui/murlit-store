@@ -1,0 +1,1 @@
+ALTER TABLE "store_settings" ADD COLUMN "cod_enabled" boolean DEFAULT true NOT NULL;
