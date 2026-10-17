@@ -76,15 +76,20 @@
 - `@utility inp` / `@utility err` shorthand Tailwind utilities in `src/styles.css`
 - Playwright integration test (temp `pw-admin-test.mjs`, deleted after pass): login, dashboard, categories, new product, edit, /shop, settings, 390px mobile, customer-denied-admin
 
-### Phase 4B — Admin extensions (next)
-- Excel/CSV bulk product import:
-  - Downloadable template
-  - Upload → preview with row-level validation errors
-  - Import: creates new products + updates existing by SKU
-  - Image URLs optional
-- Customers list (view-only, with order history)
-- Enquiries / contact-form submissions inbox
-- HSN + GST rate fields visible in product form (already in DB schema)
+### ✅ Phase 4B — Excel/CSV bulk product import and export (done)
+- `/admin/products/import` page with 3-stage flow: upload → preview → done
+- "Download Template" button: .xlsx with Products sheet (header + 2 example rows), Categories sheet, Help sheet
+- Upload .xlsx / .xls / .csv (max 2 MB, max 1 000 rows); file parsed server-side via SheetJS
+- Preview table: each row shows "New" / "Update" (matched by SKU) or "Error" badge with per-row messages
+  - Update rows: name / category / price not required (only sku); GST + MRP validations still apply
+  - Image URL validation skipped for update rows (existing images stay in DB)
+- "Import N valid rows" button → `executeImport` server fn; creates new products (auto-slug) or updates existing; returns `{ created, updated, skipped, warnings }`
+- Import summary card with "Download Error Report" (.xlsx) and "Import Another File"
+- "Export products" button on products list → .xlsx in same template format (all columns)
+- `exportProducts` / `generateErrorReport` / `downloadTemplate` / `previewImport` / `executeImport` — all in `src/fns/admin/import-export.ts`
+- "Import from Excel" link + "Export" button added to `/admin/products` list header
+- `xlsx@0.18.5` added to dependencies
+- Playwright E2E tests: template download, upload/preview (3 new + 1 update + 2 error), import, verify in admin, export, re-import (0 new, 0 errors), non-admin blocked, error report download — all pass
 
 ### ✅ Phase 5 — Cart, Wishlist, Checkout, GST, Razorpay + COD
 - Real DB-backed cart: guest via `murlit_cart` httpOnly cookie (90-day, sessionKey), user cart via userId; merge on login

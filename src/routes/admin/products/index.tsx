@@ -5,9 +5,10 @@ import {
   listAdminProducts, toggleProductActive, toggleProductFeatured,
   deleteProduct, bulkProductAction,
 } from "@/fns/admin/products";
+import { exportProducts } from "@/fns/admin/import-export";
 import { inrFromPaise } from "@/lib/format";
 import { clImg } from "@/lib/cloudinary";
-import { Plus, Pencil, Trash2, Search, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Star, ChevronLeft, ChevronRight, Upload, Download } from "lucide-react";
 
 export const Route = createFileRoute("/admin/products/")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -42,6 +43,27 @@ function ProductsPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const b64 = await exportProducts();
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "murlit-products-export.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Products exported");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const setSearch = (patch: Partial<typeof search>) =>
     navigate({ search: (prev) => ({ ...prev, ...patch, page: 1 }) });
@@ -114,12 +136,29 @@ function ProductsPage() {
           <h1 className="text-xl font-semibold text-gray-900">Products</h1>
           <p className="text-sm text-gray-500 mt-0.5">{total} product{total !== 1 ? "s" : ""}</p>
         </div>
-        <Link
-          to="/admin/products/new"
-          className="flex items-center gap-1.5 rounded bg-[var(--maroon)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          <Plus size={15} /> New Product
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 rounded border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            data-testid="export-products"
+          >
+            <Download size={14} /> {exporting ? "Exporting…" : "Export"}
+          </button>
+          <Link
+            to="/admin/products/import"
+            className="flex items-center gap-1.5 rounded border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50"
+            data-testid="import-from-excel"
+          >
+            <Upload size={14} /> Import from Excel
+          </Link>
+          <Link
+            to="/admin/products/new"
+            className="flex items-center gap-1.5 rounded bg-[var(--maroon)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            <Plus size={15} /> New Product
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
