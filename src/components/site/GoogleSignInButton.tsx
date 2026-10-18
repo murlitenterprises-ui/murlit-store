@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
+import { toast } from "sonner";
 
 interface Props {
   callbackURL?: string;
@@ -12,8 +13,13 @@ export function GoogleSignInButton({ callbackURL = "/account", label = "Continue
   const handleClick = async () => {
     setLoading(true);
     try {
-      await signIn.social({ provider: "google", callbackURL });
-    } catch {
+      const result = await signIn.social({ provider: "google", callbackURL });
+      if (result?.error) {
+        toast.error(result.error.message ?? "Google sign-in failed. Please try again.");
+        setLoading(false);
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Google sign-in failed. Please try again.");
       setLoading(false);
     }
   };
