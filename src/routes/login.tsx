@@ -4,10 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useEffect } from "react";
 import { signIn } from "@/lib/auth-client";
-import { getCurrentUser } from "@/fns/auth";
+import { getCurrentUser, isGoogleEnabled } from "@/fns/auth";
 import { redirect } from "@tanstack/react-router";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { GoogleSignInButton } from "@/components/site/GoogleSignInButton";
 
 const schema = z.object({
   email: z.email("Enter a valid email"),
@@ -24,11 +25,13 @@ export const Route = createFileRoute("/login")({
     const user = await getCurrentUser();
     if (user) throw redirect({ to: "/account" });
   },
+  loader: async () => ({ googleEnabled: await isGoogleEnabled() }),
   component: LoginPage,
 });
 
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
+  const { googleEnabled } = Route.useLoaderData();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,6 +70,20 @@ function LoginPage() {
           <h1 className="font-display text-3xl text-maroon">Welcome Back</h1>
           <p className="mt-2 text-sm text-muted-foreground">Sign in to your Murlit account</p>
         </div>
+
+        {googleEnabled && (
+          <>
+            <GoogleSignInButton callbackURL={redirectTo ?? "/account"} />
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-background px-3 text-muted-foreground">or continue with email</span>
+              </div>
+            </div>
+          </>
+        )}
 
         {error && (
           <div className="mb-4 rounded-sm bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
