@@ -4,8 +4,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useEffect } from "react";
 import { signUp } from "@/lib/auth-client";
+import { isGoogleEnabled } from "@/fns/auth";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { GoogleSignInButton } from "@/components/site/GoogleSignInButton";
 
 const schema = z
   .object({
@@ -22,10 +24,12 @@ const schema = z
 type FormData = z.infer<typeof schema>;
 
 export const Route = createFileRoute("/signup")({
+  loader: async () => ({ googleEnabled: await isGoogleEnabled() }),
   component: SignupPage,
 });
 
 function SignupPage() {
+  const { googleEnabled } = Route.useLoaderData();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,6 +68,20 @@ function SignupPage() {
           <h1 className="font-display text-3xl text-maroon">Create Account</h1>
           <p className="mt-2 text-sm text-muted-foreground">Join Murlit Enterprises</p>
         </div>
+
+        {googleEnabled && (
+          <>
+            <GoogleSignInButton label="Sign up with Google" />
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-background px-3 text-muted-foreground">or sign up with email</span>
+              </div>
+            </div>
+          </>
+        )}
 
         {error && (
           <div className="mb-4 rounded-sm bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
