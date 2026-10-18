@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useSession, signOut, authClient } from "@/lib/auth-client";
+import { signOut, authClient } from "@/lib/auth-client";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { getCurrentUser } from "@/fns/auth";
@@ -26,6 +26,7 @@ export const Route = createFileRoute("/account")({
   beforeLoad: async () => {
     const user = await getCurrentUser();
     if (!user) throw redirect({ to: "/login", search: { redirect: "/account" } });
+    return { user };
   },
   component: AccountPage,
 });
@@ -84,7 +85,7 @@ type Address = {
 
 function AccountPage() {
   const navigate = useNavigate();
-  const { data: session } = useSession();
+  const { user } = Route.useRouteContext();
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
@@ -96,8 +97,6 @@ function AccountPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
-
-  const user = session?.user;
 
   // ─── Profile form ──────────────────────────────────────────────────────────
   const profileForm = useForm<ProfileData>({

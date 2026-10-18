@@ -70,4 +70,8 @@ export const auth = betterAuth({
       ],
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  // Redirect OAuth errors to /login?error=... instead of defaulting to home page in production
+  onAPIError: {
+    errorURL: "/login",
+  },
 });

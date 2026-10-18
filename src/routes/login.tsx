@@ -20,6 +20,7 @@ type FormData = z.infer<typeof schema>;
 export const Route = createFileRoute("/login")({
   validateSearch: (s: Record<string, unknown>) => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
+    error: typeof s.error === "string" ? s.error : undefined,
   }),
   beforeLoad: async () => {
     const user = await getCurrentUser();
@@ -30,10 +31,12 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { redirect: redirectTo } = Route.useSearch();
+  const { redirect: redirectTo, error: oauthError } = Route.useSearch();
   const { googleEnabled } = Route.useLoaderData();
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    oauthError ? "Google sign-in failed. Please try again." : null
+  );
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
