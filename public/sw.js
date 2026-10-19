@@ -1,35 +1,15 @@
-// Murlit Service Worker — caches static assets only.
-// NEVER caches /api, /admin, /account, /checkout, /cart or auth requests.
+// Murlit Service Worker — caches Vite-hashed assets only.
+// NEVER caches HTML navigations, /api, /admin, /account, /checkout, /cart, or auth requests.
+// Cache name bumped to v2 — old caches (v1) are deleted on activate.
 
-const CACHE_NAME = "murlit-static-v1";
+const CACHE_NAME = "murlit-static-v2";
 
-// Paths that must NEVER be cached (served fresh from network always)
-const NEVER_CACHE = [
-  "/api/",
-  "/admin",
-  "/account",
-  "/checkout",
-  "/cart",
-  "/_server/",   // TanStack Start server functions
-];
-
-function shouldCache(url) {
-  const { pathname } = new URL(url);
-  if (NEVER_CACHE.some((prefix) => pathname.startsWith(prefix))) return false;
-  return true;
-}
-
-// On install: pre-cache the offline fallback page + core static assets
+// On install: claim immediately, no pre-caching of non-hashed files
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(["/offline.html", "/favicon.png"])
-    )
-  );
   self.skipWaiting();
 });
 
-// On activate: delete old caches
+// On activate: delete every cache that is not the current version
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -41,41 +21,33 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch strategy: network-first for navigation, cache-first for static assets
+// Fetch strategy:
+//   • Navigations → pure network-first (no cache fallback for HTML)
+//   • /assets/** (Vite content-hashed) → cache-first (immutable)
+//   • Everything else → network-only (images, videos, api, etc.)
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-
-  // Only handle GET requests
   if (request.method !== "GET") return;
 
-  const url = request.url;
+  const { pathname } = new URL(request.url);
 
-  // Never intercept uncacheable paths
-  if (!shouldCache(url)) return;
-
-  const isNavigation = request.mode === "navigate";
-
-  if (isNavigation) {
-    // Navigation: try network, fall back to offline page
-    event.respondWith(
-      fetch(request).catch(() =>
-        caches.match("/offline.html").then((r) => r ?? new Response("Offline", { status: 503 }))
-      )
-    );
+  // Navigations: always fetch from network; never serve stale HTML
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request));
     return;
   }
 
-  // Static assets (images, fonts, JS, CSS): cache-first, update in background
-  if (/\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|css|js)(\?.*)?$/.test(url)) {
+  // Vite-hashed assets: safe to cache forever (filenames change on every build)
+  if (pathname.startsWith("/assets/")) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request);
-        const networkFetch = fetch(request).then((res) => {
-          if (res.ok) cache.put(request, res.clone());
-          return res;
-        }).catch(() => cached);
-        return cached ?? networkFetch;
+        if (cached) return cached;
+        const res = await fetch(request);
+        if (res.ok) cache.put(request, res.clone());
+        return res;
       })
     );
   }
+  // All other requests (images, videos, api, etc.) go straight to network
 });
