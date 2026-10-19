@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useState, useEffect } from "react";
 import { signUp } from "@/lib/auth-client";
 import { isGoogleEnabled } from "@/fns/auth";
+import { attachReferral } from "@/fns/referral";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { GoogleSignInButton } from "@/components/site/GoogleSignInButton";
@@ -50,6 +51,15 @@ function SignupPage() {
       if (result.error) {
         setError(result.error.message ?? "Sign up failed. Please try again.");
       } else {
+        // Attach referral from cookie if present
+        try {
+          const refMatch = document.cookie.match(/murlit_ref=([^;]+)/);
+          const refCode = refMatch ? decodeURIComponent(refMatch[1]) : null;
+          if (refCode) {
+            await attachReferral({ data: { refCode } }).catch(() => {});
+            document.cookie = "murlit_ref=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          }
+        } catch {}
         navigate({ to: "/account" });
       }
     } catch (e: any) {

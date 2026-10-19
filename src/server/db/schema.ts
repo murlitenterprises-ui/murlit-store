@@ -28,6 +28,8 @@ export const userRoleEnum = pgEnum("user_role", ["customer", "admin"]);
 
 export const couponTypeEnum = pgEnum("coupon_type", ["percent", "flat"]);
 
+export const coinLedgerTypeEnum = pgEnum("coin_ledger_type", ["earn", "spend", "reverse", "expire", "admin_adjust"]);
+
 export const enquiryTypeEnum = pgEnum("enquiry_type", ["custom", "bulk", "contact"]);
 
 export const enquiryStatusEnum = pgEnum("enquiry_status", [
@@ -112,9 +114,12 @@ export const users = pgTable("users", {
   // Use text (not pgEnum) so Better Auth's Drizzle adapter can read/write it without enum casting issues
   role:          text("role").notNull().default("customer"),
   phone:         text("phone"),
+  referralCode:  text("referral_code"),  // unique, generated lazily
+  referredBy:    text("referred_by"),    // userId of the referrer
   ...timestamps,
 }, (t) => [
   uniqueIndex("users_email_idx").on(t.email),
+  uniqueIndex("users_referral_code_idx").on(t.referralCode),
 ]);
 
 export const sessions = pgTable("sessions", {
@@ -238,6 +243,10 @@ export const orders = pgTable("orders", {
   invoiceNumber:    text("invoice_number"),
   invoiceDate:      timestamp("invoice_date", { withTimezone: true }),
   couponCode:       text("coupon_code"),
+  couponDiscount:   integer("coupon_discount").notNull().default(0),  // paise
+  coinsUsed:        integer("coins_used").notNull().default(0),        // number of coins
+  coinsValue:       integer("coins_value").notNull().default(0),       // paise value
+  referralDiscount: integer("referral_discount").notNull().default(0), // paise
   ...timestamps,
 }, (t) => [
   uniqueIndex("orders_order_number_idx").on(t.orderNumber),
@@ -288,9 +297,16 @@ export const storeSettings = pgTable("store_settings", {
   pricesIncludeGst:   boolean("prices_include_gst").notNull().default(true),
   freeShippingAbove:  integer("free_shipping_above").notNull().default(50000), // paise
   shippingFee:        integer("shipping_fee").notNull().default(9900),          // paise
-  codEnabled:         boolean("cod_enabled").notNull().default(true),
-  whatsappNumber:     text("whatsapp_number"),
-  supportEmail:       text("support_email"),
+  codEnabled:               boolean("cod_enabled").notNull().default(true),
+  whatsappNumber:           text("whatsapp_number"),
+  supportEmail:             text("support_email"),
+  // Refer & Earn settings
+  referralEnabled:          boolean("referral_enabled").notNull().default(true),
+  referralCoinReward:       integer("referral_coin_reward").notNull().default(100),      // coins earned by referrer
+  referralWelcomeDiscount:  integer("referral_welcome_discount").notNull().default(5000), // paise (₹50)
+  coinValuePaise:           integer("coin_value_paise").notNull().default(100),           // paise per coin (₹1)
+  maxCoinsPctPerOrder:      integer("max_coins_pct_per_order").notNull().default(20),     // % of order value
+  coinExpiryDays:           integer("coin_expiry_days").notNull().default(365),
   ...timestamps,
 });
 
@@ -324,6 +340,9 @@ export const coupons = pgTable("coupons", {
   usageLimit:  integer("usage_limit"),
   usedCount:   integer("used_count").notNull().default(0),
   isActive:    boolean("is_active").notNull().default(true),
+  perUserLimit: integer("per_user_limit"),           // null = unlimited
+  firstOrderOnly: boolean("first_order_only").notNull().default(false),
+  description: text("description"),
   ...timestamps,
 }, (t) => [
   uniqueIndex("coupons_code_idx").on(t.code),
@@ -354,6 +373,35 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   ...timestamps,
 }, (t) => [
   uniqueIndex("newsletter_email_idx").on(t.email),
+]);
+
+// ─── Coupon Usages ────────────────────────────────────────────────────────────
+
+export const couponUsages = pgTable("coupon_usages", {
+  id:       uuid("id").primaryKey().defaultRandom(),
+  couponId: uuid("coupon_id").notNull().references(() => coupons.id, { onDelete: "cascade" }),
+  userId:   text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  orderId:  uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("coupon_usages_coupon_idx").on(t.couponId),
+  index("coupon_usages_user_idx").on(t.userId),
+]);
+
+// ─── Coin Ledger ──────────────────────────────────────────────────────────────
+
+export const coinLedger = pgTable("coin_ledger", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  userId:    text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type:      coinLedgerTypeEnum("type").notNull(),
+  amount:    integer("amount").notNull(), // +ve = credit, -ve = debit
+  reason:    text("reason").notNull(),
+  orderId:   uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("coin_ledger_user_idx").on(t.userId),
+  index("coin_ledger_order_idx").on(t.orderId),
 ]);
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────

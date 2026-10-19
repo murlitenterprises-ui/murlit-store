@@ -1,12 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { db, orders, orderItems, products, storeSettings, carts, cartItems, orderHistory } from "@/server/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { db } from "@/server/db";
+import { orders, orderItems, products, storeSettings, carts, cartItems, orderHistory, couponUsages, coupons, coinLedger, users } from "@/server/db/schema";
+import { eq, and, inArray, count } from "drizzle-orm";
 import { requireUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { assignInvoiceNumber } from "@/server/invoice-service";
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
+import { validateCoupon } from "@/server/coupon-helpers";
+import { getCoinBalanceForUser } from "@/server/referral-helpers";
 
 // Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
 // Accepts: "DL", "Delhi", "07" (GSTIN prefix), "dl" — returns "DL" or the uppercased input as fallback.
@@ -105,7 +108,11 @@ const addressSnap = z.object({
 });
 
 export const getCheckoutSummary = createServerFn()
-  .validator(z.object({ shippingStateCode: z.string() }))
+  .validator(z.object({
+    shippingStateCode: z.string(),
+    couponCode: z.string().optional(),
+    useCoins: z.boolean().optional(),
+  }))
   .handler(async ({ data }) => {
     const user = await requireUser();
 
@@ -172,7 +179,58 @@ export const getCheckoutSummary = createServerFn()
     });
 
     const shipping = subtotal >= freeShippingAbove ? 0 : shippingFee;
-    const grand = subtotal + shipping;
+
+    // ── Referral welcome discount (auto if user was referred and this is first order) ──
+    let referralDiscount = 0;
+    const referralEnabled = settings?.referralEnabled ?? true;
+    const referralWelcomeDiscount = settings?.referralWelcomeDiscount ?? 5000;
+    if (referralEnabled) {
+      const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
+      if (userData?.referredBy) {
+        const [{ n: prevOrders }] = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
+        if (Number(prevOrders) === 0) {
+          referralDiscount = Math.min(referralWelcomeDiscount, subtotal);
+        }
+      }
+    }
+
+    // ── Coupon discount ──────────────────────────────────────────────────────────
+    let couponDiscount = 0;
+    let couponResult: { valid: boolean; code?: string; discount?: number; error?: string; description?: string | null } = { valid: false };
+    if (data.couponCode?.trim()) {
+      const res = await validateCoupon(data.couponCode, subtotal - referralDiscount, user.id);
+      couponResult = res;
+      if (res.valid) couponDiscount = res.discount;
+    }
+
+    // ── Coins discount ───────────────────────────────────────────────────────────
+    let coinsUsed = 0;
+    let coinsValue = 0;
+    const coinValuePaise = settings?.coinValuePaise ?? 100;
+    const maxCoinsPct = settings?.maxCoinsPctPerOrder ?? 20;
+    if (data.useCoins && referralEnabled) {
+      const coinBalance = await getCoinBalanceForUser(user.id);
+      const maxCoinsValue = Math.floor((subtotal * maxCoinsPct) / 100);
+      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - couponDiscount - referralDiscount);
+      if (applicableValue > 0) {
+        coinsValue = applicableValue;
+        coinsUsed = Math.floor(coinsValue / coinValuePaise);
+      }
+    }
+
+    const totalDiscount = couponDiscount + coinsValue + referralDiscount;
+    const discountedSubtotal = Math.max(0, subtotal - totalDiscount);
+
+    // Scale taxable/tax proportionally
+    let adjustedTaxable = totalTaxable;
+    let adjustedTax = totalTax;
+    if (totalDiscount > 0 && subtotal > 0) {
+      const ratio = discountedSubtotal / subtotal;
+      adjustedTaxable = Math.round(totalTaxable * ratio);
+      adjustedTax = Math.round(totalTax * ratio);
+    }
+
+    const grand = discountedSubtotal + shipping;
 
     return {
       lineItems,
@@ -180,15 +238,26 @@ export const getCheckoutSummary = createServerFn()
       shipping,
       shippingFee,
       freeShippingAbove,
-      taxableAmount: totalTaxable,
-      taxAmount: totalTax,
-      cgst: isSameState ? Math.round(totalTax / 2) : 0,
-      sgst: isSameState ? totalTax - Math.round(totalTax / 2) : 0,
-      igst: isSameState ? 0 : totalTax,
+      discount: totalDiscount,
+      couponDiscount,
+      coinsUsed,
+      coinsValue,
+      referralDiscount,
+      couponCode: couponResult.valid ? (couponResult as any).code : null,
+      couponError: !couponResult.valid && data.couponCode ? (couponResult as any).error : null,
+      taxableAmount: adjustedTaxable,
+      taxAmount: adjustedTax,
+      cgst: isSameState ? Math.round(adjustedTax / 2) : 0,
+      sgst: isSameState ? adjustedTax - Math.round(adjustedTax / 2) : 0,
+      igst: isSameState ? 0 : adjustedTax,
       taxType: isSameState ? "CGST_SGST" : "IGST",
       total: grand,
       storeStateCode,
       codEnabled: settings?.codEnabled ?? true,
+      coinBalance: data.useCoins !== undefined ? await getCoinBalanceForUser(user.id) : null,
+      coinValuePaise,
+      maxCoinsPct,
+      referralEnabled: settings?.referralEnabled ?? true,
     };
   });
 
@@ -199,6 +268,8 @@ const placeOrderSchema = z.object({
   paymentMethod: z.enum(["cod", "razorpay"]),
   customerGstin: z.string().optional(),
   businessName: z.string().optional(),
+  couponCode: z.string().optional(),
+  useCoins: z.boolean().optional(),
 });
 
 export const placeOrder = createServerFn()
@@ -277,10 +348,63 @@ export const placeOrder = createServerFn()
     });
 
     const shipping = subtotal >= freeShippingAbove ? 0 : shippingFee;
-    const cgst = isSameState ? Math.round(totalTax / 2) : 0;
-    const sgst = isSameState ? totalTax - Math.round(totalTax / 2) : 0;
-    const igst = isSameState ? 0 : totalTax;
-    const total = subtotal + shipping;
+
+    // ── Referral discount (first-order only, auto-applied) ──────────────────────
+    let referralDiscount = 0;
+    if (settings?.referralEnabled !== false) {
+      const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
+      if (userData?.referredBy) {
+        const [{ n: prevOrders }] = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
+        if (Number(prevOrders) === 0) {
+          referralDiscount = Math.min(settings?.referralWelcomeDiscount ?? 5000, subtotal);
+        }
+      }
+    }
+
+    // ── Coupon validation (server re-validates) ──────────────────────────────────
+    let couponDiscount = 0;
+    let validatedCouponCode: string | null = null;
+    let couponId: string | null = null;
+    if (data.couponCode?.trim()) {
+      const res = await validateCoupon(data.couponCode, subtotal - referralDiscount, user.id);
+      if (!res.valid) throw new Error(res.error);
+      couponDiscount = res.discount;
+      validatedCouponCode = res.code;
+      const [c] = await db.select({ id: coupons.id }).from(coupons).where(eq(coupons.code, res.code)).limit(1);
+      couponId = c?.id ?? null;
+    }
+
+    // ── Coins validation (server re-validates balance) ───────────────────────────
+    let coinsUsed = 0;
+    let coinsValue = 0;
+    if (data.useCoins && settings?.referralEnabled !== false) {
+      const coinValuePaise = settings?.coinValuePaise ?? 100;
+      const maxCoinsPct = settings?.maxCoinsPctPerOrder ?? 20;
+      const coinBalance = await getCoinBalanceForUser(user.id);
+      const maxCoinsValue = Math.floor((subtotal * maxCoinsPct) / 100);
+      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - couponDiscount - referralDiscount);
+      if (applicableValue > 0) {
+        coinsValue = applicableValue;
+        coinsUsed = Math.floor(coinsValue / coinValuePaise);
+      }
+    }
+
+    const totalDiscount = couponDiscount + coinsValue + referralDiscount;
+    const discountedSubtotal = Math.max(0, subtotal - totalDiscount);
+
+    // Scale taxable/tax proportionally after discount
+    let adjustedTaxable = totalTaxable;
+    let adjustedTax = totalTax;
+    if (totalDiscount > 0 && subtotal > 0) {
+      const ratio = discountedSubtotal / subtotal;
+      adjustedTaxable = Math.round(totalTaxable * ratio);
+      adjustedTax = Math.round(totalTax * ratio);
+    }
+
+    const cgst = isSameState ? Math.round(adjustedTax / 2) : 0;
+    const sgst = isSameState ? adjustedTax - Math.round(adjustedTax / 2) : 0;
+    const igst = isSameState ? 0 : adjustedTax;
+    const total = discountedSubtotal + shipping;
 
     // Generate order number from a random UUID segment — guaranteed unique, no race condition.
     // Format: PREFIX-YYYYMM-XXXXXXXX (e.g. MUR-202610-A1B2C3D4)
@@ -302,8 +426,13 @@ export const placeOrder = createServerFn()
         paymentStatus: data.paymentMethod === "cod" ? "pending" : "pending",
         subtotal,
         shipping,
-        discount: 0,
-        taxableAmount: totalTaxable,
+        discount: totalDiscount,
+        couponDiscount,
+        couponCode: validatedCouponCode,
+        coinsUsed,
+        coinsValue,
+        referralDiscount,
+        taxableAmount: adjustedTaxable,
         cgst,
         sgst,
         igst,
@@ -348,6 +477,24 @@ export const placeOrder = createServerFn()
         createdBy: user.id,
       });
       await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+
+      // Record coupon usage + increment usedCount
+      if (couponId && validatedCouponCode) {
+        await db.insert(couponUsages).values({ couponId, userId: user.id, orderId: order.id });
+        await db.update(coupons).set({ usedCount: (await db.select({ v: coupons.usedCount }).from(coupons).where(eq(coupons.id, couponId)).limit(1))[0].v + 1, updatedAt: new Date() }).where(eq(coupons.id, couponId));
+      }
+
+      // Deduct coins from wallet
+      if (coinsUsed > 0) {
+        await db.insert(coinLedger).values({
+          userId: user.id,
+          type: "spend",
+          amount: -coinsUsed,
+          reason: `Used on order ${orderNumber}`,
+          orderId: order.id,
+        });
+      }
+
       const invNum = await assignInvoiceNumber(order.id);
       // Generate PDF for attachment
       let invoicePdfBase64: string | undefined;
@@ -494,6 +641,31 @@ export const verifyRazorpayPayment = createServerFn()
       note: "Payment verified (Razorpay)",
       createdBy: user.id,
     });
+
+    // Record coupon usage if applicable
+    if (order.couponCode) {
+      const [c] = await db.select({ id: coupons.id, usedCount: coupons.usedCount }).from(coupons).where(eq(coupons.code, order.couponCode)).limit(1);
+      if (c) {
+        await db.insert(couponUsages).values({ couponId: c.id, userId: user.id, orderId: order.id }).onConflictDoNothing();
+        await db.update(coupons).set({ usedCount: c.usedCount + 1, updatedAt: new Date() }).where(eq(coupons.id, c.id));
+      }
+    }
+
+    // Deduct coins if applicable
+    if (order.coinsUsed > 0) {
+      const existing = await db.select({ id: coinLedger.id }).from(coinLedger)
+        .where(eq(coinLedger.orderId, order.id))
+        .limit(1);
+      if (!existing.length) {
+        await db.insert(coinLedger).values({
+          userId: user.id,
+          type: "spend",
+          amount: -order.coinsUsed,
+          reason: `Used on order ${order.orderNumber}`,
+          orderId: order.id,
+        });
+      }
+    }
 
     // Clear cart
     const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);

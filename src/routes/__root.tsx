@@ -217,6 +217,18 @@ if ('serviceWorker' in navigator) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Capture ?ref=CODE from URL and store in a 30-day cookie for referral attribution
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref && /^[A-Z0-9]{4,12}$/.test(ref)) {
+      const expires = new Date();
+      expires.setDate(expires.getDate() + 30);
+      document.cookie = `murlit_ref=${encodeURIComponent(ref)}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <CartProvider>

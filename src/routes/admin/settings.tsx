@@ -33,6 +33,12 @@ const schema = z.object({
   shippingFeeRs: z.number().min(0),
   whatsappNumber: z.string().optional(),
   supportEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+  referralEnabled: z.boolean().default(true),
+  referralCoinReward: z.number().int().min(0).default(100),
+  referralWelcomeDiscount: z.number().min(0).default(50),
+  coinValuePaise: z.number().int().min(1).default(100),
+  maxCoinsPctPerOrder: z.number().int().min(1).max(100).default(20),
+  coinExpiryDays: z.number().int().min(1).default(365),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -89,6 +95,12 @@ function SettingsPage() {
       shippingFeeRs: (settings?.shippingFee ?? 9900) / 100,
       whatsappNumber: settings?.whatsappNumber ?? "",
       supportEmail: settings?.supportEmail ?? "",
+      referralEnabled: settings?.referralEnabled ?? true,
+      referralCoinReward: settings?.referralCoinReward ?? 100,
+      referralWelcomeDiscount: (settings?.referralWelcomeDiscount ?? 5000) / 100,
+      coinValuePaise: settings?.coinValuePaise ?? 100,
+      maxCoinsPctPerOrder: settings?.maxCoinsPctPerOrder ?? 20,
+      coinExpiryDays: settings?.coinExpiryDays ?? 365,
     },
   });
 
@@ -110,6 +122,7 @@ function SettingsPage() {
           shippingFee: Math.round(data.shippingFeeRs * 100),
           whatsappNumber: data.whatsappNumber || undefined,
           supportEmail: data.supportEmail || undefined,
+          referralWelcomeDiscount: Math.round(data.referralWelcomeDiscount * 100),
         },
       });
       toast.success("Settings saved");
@@ -224,6 +237,22 @@ function SettingsPage() {
         <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Contact</h2>
         <SettingsField label="WhatsApp Number" name="whatsappNumber" placeholder="+919876543210" register={register} errors={errors} />
         <SettingsField label="Support Email" name="supportEmail" type="email" placeholder="support@murlit.com" register={register} errors={errors} />
+      </section>
+
+      {/* Refer & Earn */}
+      <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Refer & Earn</h2>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" {...register("referralEnabled")} className="rounded" />
+          Enable Referral Program & Coins
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SettingsField label="Coins earned by referrer (on friend's first delivery)" name="referralCoinReward" type="number" placeholder="100" hint="e.g. 100 coins = ₹100" register={register} errors={errors} />
+          <SettingsField label="Welcome discount for referred friend (₹)" name="referralWelcomeDiscount" type="number" placeholder="50" hint="Stored in paise internally — enter ₹ value" register={register} errors={errors} />
+          <SettingsField label="Coin value (paise per coin)" name="coinValuePaise" type="number" placeholder="100" hint="100 = 1 coin = ₹1" register={register} errors={errors} />
+          <SettingsField label="Max coins per order (%)" name="maxCoinsPctPerOrder" type="number" placeholder="20" hint="% of order value that can be paid in coins" register={register} errors={errors} />
+          <SettingsField label="Coin expiry (days)" name="coinExpiryDays" type="number" placeholder="365" register={register} errors={errors} />
+        </div>
       </section>
 
       <button

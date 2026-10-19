@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { db, orders, orderItems, orderHistory, products, storeSettings } from "@/server/db";
+import { db } from "@/server/db";
+import { orders, orderItems, orderHistory, products, storeSettings, coinLedger, coupons, couponUsages } from "@/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireUser } from "@/server/auth-helpers";
 
@@ -96,6 +97,26 @@ export const cancelMyOrder = createServerFn()
       note: "Cancelled by customer",
       createdBy: user.id,
     });
+
+    // Refund coins if any were used
+    if (order.coinsUsed > 0) {
+      await db.insert(coinLedger).values({
+        userId: user.id,
+        type: "reverse",
+        amount: order.coinsUsed,
+        reason: `Refund for cancelled order ${order.orderNumber}`,
+        orderId: order.id,
+      });
+    }
+
+    // Release coupon usage
+    if (order.couponCode) {
+      const [c] = await db.select({ id: coupons.id, usedCount: coupons.usedCount }).from(coupons).where(eq(coupons.code, order.couponCode)).limit(1);
+      if (c) {
+        await db.delete(couponUsages).where(and(eq(couponUsages.couponId, c.id), eq(couponUsages.orderId, order.id)));
+        await db.update(coupons).set({ usedCount: Math.max(0, c.usedCount - 1), updatedAt: new Date() }).where(eq(coupons.id, c.id));
+      }
+    }
 
     return { success: true };
   });

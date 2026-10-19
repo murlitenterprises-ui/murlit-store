@@ -17,10 +17,11 @@ import {
 } from "@/fns/addresses";
 import { listMyOrders, cancelMyOrder } from "@/fns/orders";
 import { getInvoice } from "@/fns/invoice";
+import { getMyReferralInfo, getMyCoinLedger } from "@/fns/referral";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { toast } from "sonner";
 import { inrFromPaise } from "@/lib/format";
-import { Download } from "lucide-react";
+import { Download, Copy, Share2 } from "lucide-react";
 
 export const Route = createFileRoute("/account")({
   beforeLoad: async () => {
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/account")({
   component: AccountPage,
 });
 
-type Tab = "profile" | "addresses" | "orders" | "wishlist" | "security";
+type Tab = "profile" | "addresses" | "orders" | "wishlist" | "referral" | "security";
 
 // ─── Profile form ─────────────────────────────────────────────────────────────
 const profileSchema = z.object({
@@ -97,6 +98,8 @@ function AccountPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
+  const [referralInfo, setReferralInfo] = useState<Awaited<ReturnType<typeof getMyReferralInfo>> | null>(null);
+  const [coinLedgerData, setCoinLedgerData] = useState<Awaited<ReturnType<typeof getMyCoinLedger>> | null>(null);
 
   // ─── Profile form ──────────────────────────────────────────────────────────
   const profileForm = useForm<ProfileData>({
@@ -169,6 +172,12 @@ function AccountPage() {
 
   useEffect(() => {
     if (activeTab === "orders") loadOrders();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "referral") return;
+    getMyReferralInfo().then(setReferralInfo).catch(() => {});
+    getMyCoinLedger({ data: { page: 1 } }).then(setCoinLedgerData).catch(() => {});
   }, [activeTab]);
 
   const handleCancelOrder = async (orderNumber: string) => {
@@ -278,6 +287,7 @@ function AccountPage() {
     { id: "addresses", label: "Addresses" },
     { id: "orders", label: "My Orders" },
     { id: "wishlist", label: "Wishlist" },
+    { id: "referral", label: "Refer & Earn" },
     { id: "security", label: "Security" },
   ];
 
@@ -612,6 +622,84 @@ function AccountPage() {
               <div className="rounded-sm border bg-background p-6">
                 <h2 className="font-display text-xl text-maroon mb-6">Wishlist</h2>
                 <p className="text-muted-foreground">Wishlist coming soon.</p>
+              </div>
+            )}
+
+            {/* ── Refer & Earn ── */}
+            {activeTab === "referral" && (
+              <div className="space-y-6">
+                {/* Referral Card */}
+                <div className="rounded-sm border bg-background p-6">
+                  <h2 className="font-display text-xl text-maroon mb-1">Refer & Earn</h2>
+                  <p className="text-sm text-muted-foreground mb-6">Share your link — your friend gets ₹{referralInfo ? (referralInfo.settings.referralWelcomeDiscount / 100).toFixed(0) : "50"} off, you earn {referralInfo?.settings.referralCoinReward ?? 100} coins when they order!</p>
+
+                  {referralInfo ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Your Referral Code</label>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 bg-sage rounded-sm px-4 py-2.5 font-mono text-lg font-bold text-maroon tracking-widest">{referralInfo.referralCode}</code>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(referralInfo.referralLink); toast.success("Link copied!"); }}
+                            className="flex items-center gap-1.5 rounded-sm bg-royal px-3 py-2.5 text-sm font-semibold text-on-dark hover:opacity-90"
+                          >
+                            <Copy size={14} /> Copy
+                          </button>
+                          {typeof navigator !== "undefined" && "share" in navigator && (
+                            <button
+                              onClick={() => (navigator as any).share({ title: "Murlit", text: "Shop on Murlit and get ₹50 off!", url: referralInfo.referralLink }).catch(() => {})}
+                              className="flex items-center gap-1.5 rounded-sm border border-maroon px-3 py-2.5 text-sm font-semibold text-maroon hover:bg-maroon hover:text-on-dark transition"
+                            >
+                              <Share2 size={14} /> Share
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground break-all">{referralInfo.referralLink}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-sm bg-sage p-4 text-center">
+                          <div className="text-3xl font-bold text-maroon">{referralInfo.referredCount}</div>
+                          <div className="text-xs text-muted-foreground mt-1">Friends joined</div>
+                        </div>
+                        <div className="rounded-sm bg-sage p-4 text-center">
+                          <div className="text-3xl font-bold text-maroon">{referralInfo.coinBalance}</div>
+                          <div className="text-xs text-muted-foreground mt-1">Coin balance (₹{referralInfo.coinBalance})</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-sm border border-dashed p-4 text-sm space-y-1 text-muted-foreground">
+                        <p>📤 Share your link — friend signs up via your link</p>
+                        <p>🛍️ Friend places their first order and gets ₹{(referralInfo.settings.referralWelcomeDiscount / 100).toFixed(0)} off</p>
+                        <p>🚚 After their order is delivered, you earn {referralInfo.settings.referralCoinReward} coins</p>
+                        <p>💰 Use coins at checkout (1 coin = ₹1, max {referralInfo.settings.maxCoinsPctPerOrder}% of order)</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Loading…</p>
+                  )}
+                </div>
+
+                {/* Coin History */}
+                <div className="rounded-sm border bg-background p-6">
+                  <h3 className="font-semibold mb-4 text-maroon">Coin History</h3>
+                  {coinLedgerData?.rows.length === 0 && <p className="text-sm text-muted-foreground">No coin activity yet.</p>}
+                  {coinLedgerData && coinLedgerData.rows.length > 0 && (
+                    <div className="divide-y">
+                      {coinLedgerData.rows.map((row) => (
+                        <div key={row.id} className="flex items-center justify-between py-3">
+                          <div>
+                            <p className="text-sm">{row.reason}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(row.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}{row.expiresAt ? ` · Expires ${new Date(row.expiresAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}` : ""}</p>
+                          </div>
+                          <span className={`font-bold text-sm ${row.amount > 0 ? "text-green-600" : "text-red-500"}`}>
+                            {row.amount > 0 ? "+" : ""}{row.amount}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

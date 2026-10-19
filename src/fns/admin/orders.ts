@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { db, orders, orderItems, orderHistory, products } from "@/server/db";
+import { db } from "@/server/db";
+import { orders, orderItems, orderHistory, products, coinLedger, coupons, couponUsages, users, storeSettings } from "@/server/db/schema";
 import { eq, and, ilike, or, desc, gte, lte, sql, count } from "drizzle-orm";
 import { requireAdmin } from "@/server/auth-helpers";
 import { sendOrderShippedEmail, sendOrderCancelledEmail } from "@/lib/email";
@@ -129,6 +130,36 @@ export const updateOrderStatus = createServerFn()
       }
     }
 
+    // When order is delivered: credit coins to referrer if applicable
+    if (data.status === "delivered") {
+      const [ord] = await db.select().from(orders).where(eq(orders.id, data.orderId)).limit(1);
+      if (ord?.userId) {
+        const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, ord.userId)).limit(1);
+        if (userData?.referredBy) {
+          // Check this is the referred user's first delivered order
+          const [{ n: prevDelivered }] = await db.select({ n: count() }).from(orders)
+            .where(and(eq(orders.userId, ord.userId), eq(orders.status, "delivered")));
+          if (Number(prevDelivered) === 1) { // this is the first delivered order
+            const [s] = await db.select({ referralCoinReward: storeSettings.referralCoinReward, coinExpiryDays: storeSettings.coinExpiryDays, referralEnabled: storeSettings.referralEnabled }).from(storeSettings).limit(1);
+            if (s?.referralEnabled !== false) {
+              const reward = s?.referralCoinReward ?? 100;
+              const expiryDays = s?.coinExpiryDays ?? 365;
+              const expiresAt = new Date();
+              expiresAt.setDate(expiresAt.getDate() + expiryDays);
+              await db.insert(coinLedger).values({
+                userId: userData.referredBy,
+                type: "earn",
+                amount: reward,
+                reason: `Referral reward for order ${ord.orderNumber}`,
+                orderId: ord.id,
+                expiresAt,
+              });
+            }
+          }
+        }
+      }
+    }
+
     return { success: true };
   });
 
@@ -183,6 +214,26 @@ export const cancelOrderAdmin = createServerFn()
       note: data.note ?? "Cancelled by admin",
       createdBy: (admin as any).id,
     });
+
+    // Refund coins if any were used
+    if (order.coinsUsed > 0 && order.userId) {
+      await db.insert(coinLedger).values({
+        userId: order.userId,
+        type: "reverse",
+        amount: order.coinsUsed,
+        reason: `Refund for cancelled order ${order.orderNumber}`,
+        orderId: order.id,
+      });
+    }
+
+    // Release coupon usage
+    if (order.couponCode) {
+      const [c] = await db.select({ id: coupons.id, usedCount: coupons.usedCount }).from(coupons).where(eq(coupons.code, order.couponCode)).limit(1);
+      if (c) {
+        await db.delete(couponUsages).where(and(eq(couponUsages.couponId, c.id), eq(couponUsages.orderId, order.id)));
+        await db.update(coupons).set({ usedCount: Math.max(0, c.usedCount - 1), updatedAt: new Date() }).where(eq(coupons.id, c.id));
+      }
+    }
 
     sendOrderCancelledEmail({
       orderNumber: order.orderNumber,

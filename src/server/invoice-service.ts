@@ -209,6 +209,27 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
     drawLine(page, M, y - 3, width - M, rgb(0.9, 0.9, 0.9));
   }
 
+  // Discount lines
+  const ord = order as any;
+  if ((ord.couponDiscount ?? 0) > 0) {
+    y -= 14;
+    drawText(page, `Discount (${ord.couponCode ?? "Coupon"})`, colX[0] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawText(page, `-${fmt(ord.couponDiscount)}`, colX[colX.length - 1] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawLine(page, M, y - 3, width - M, rgb(0.9, 0.9, 0.9));
+  }
+  if ((ord.coinsValue ?? 0) > 0) {
+    y -= 14;
+    drawText(page, `Coins Used (${ord.coinsUsed ?? 0} coins)`, colX[0] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawText(page, `-${fmt(ord.coinsValue)}`, colX[colX.length - 1] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawLine(page, M, y - 3, width - M, rgb(0.9, 0.9, 0.9));
+  }
+  if ((ord.referralDiscount ?? 0) > 0) {
+    y -= 14;
+    drawText(page, "Welcome Discount (Referral)", colX[0] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawText(page, `-${fmt(ord.referralDiscount)}`, colX[colX.length - 1] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawLine(page, M, y - 3, width - M, rgb(0.9, 0.9, 0.9));
+  }
+
   y -= 14;
   drawLine(page, M, y + 10, width - M, rgb(0.55, 0.07, 0.07), 1);
   y -= 6;
@@ -219,6 +240,9 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   const totalPairs: [string, string][] = [
     ["Subtotal:", fmt(order.subtotal)],
     ...(order.shipping > 0 ? [["Shipping:", fmt(order.shipping)] as [string, string]] : []),
+    ...((ord.couponDiscount ?? 0) > 0 ? [[`Discount (${ord.couponCode ?? "Coupon"}):`, `-${fmt(ord.couponDiscount)}`] as [string, string]] : []),
+    ...((ord.coinsValue ?? 0) > 0 ? [[`Coins (${ord.coinsUsed ?? 0}):`, `-${fmt(ord.coinsValue)}`] as [string, string]] : []),
+    ...((ord.referralDiscount ?? 0) > 0 ? [["Welcome Discount:", `-${fmt(ord.referralDiscount)}`] as [string, string]] : []),
     ["Taxable Amount:", fmt(order.taxableAmount)],
     ...(isSameState ? [
       ["CGST:", fmt(order.cgst)],

@@ -10,10 +10,12 @@ import { getCurrentUser } from "@/fns/auth";
 import { listAddresses, createAddress } from "@/fns/addresses";
 import { getCart } from "@/fns/cart";
 import { getCheckoutSummary, placeOrder, createRazorpayOrder, verifyRazorpayPayment } from "@/fns/checkout";
+import { getAvailableCoupons } from "@/fns/coupons";
+import { getMyReferralInfo } from "@/fns/referral";
 import { inrFromPaise } from "@/lib/format";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { useCart } from "@/lib/cart-context";
-import { Loader2, Plus, CheckCircle2 } from "lucide-react";
+import { Loader2, Plus, CheckCircle2, Tag, CircleDollarSign, ChevronDown, X } from "lucide-react";
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
@@ -65,6 +67,13 @@ function CheckoutPage() {
   const [summary, setSummary] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [useCoins, setUseCoins] = useState(false);
+  const [coinBalance, setCoinBalance] = useState(0);
+  const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
+  const [showAvailCoupons, setShowAvailCoupons] = useState(false);
 
   const addrForm = useForm<AddressForm>({ resolver: zodResolver(addressSchema) });
   const watchState = addrForm.watch("state");
@@ -77,16 +86,61 @@ function CheckoutPage() {
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
-  // Recompute summary when address changes
+  // Recompute summary when address, coupon, or coins toggle changes
   useEffect(() => {
     const addr = selectedAddress;
     if (!addr) { setSummary(null); return; }
     setSummaryLoading(true);
-    getCheckoutSummary({ data: { shippingStateCode: addr.stateCode } })
-      .then(setSummary)
+    getCheckoutSummary({
+      data: {
+        shippingStateCode: addr.stateCode,
+        couponCode: appliedCoupon ?? undefined,
+        useCoins,
+      },
+    })
+      .then((s) => {
+        setSummary(s);
+        if (s?.couponError) setCouponError(s.couponError);
+        else if (appliedCoupon) setCouponError(null);
+        if (s?.coinBalance !== null && s?.coinBalance !== undefined) setCoinBalance(s.coinBalance);
+      })
       .catch(() => setSummary(null))
       .finally(() => setSummaryLoading(false));
+  }, [selectedAddressId, appliedCoupon, useCoins]);
+
+  // Load referral info + available coupons when address is selected
+  useEffect(() => {
+    if (!selectedAddress) return;
+    getMyReferralInfo().then((info) => {
+      setCoinBalance(info.coinBalance);
+    }).catch(() => {});
   }, [selectedAddressId]);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    if (!selectedAddress) { toast.error("Select an address first"); return; }
+    const subtotal = summary?.subtotal ?? 0;
+    if (!subtotal) { toast.error("Cart is empty"); return; }
+    // Apply by refreshing summary with coupon — the server validates
+    setAppliedCoupon(couponInput.trim().toUpperCase());
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput("");
+    setCouponError(null);
+  };
+
+  const loadAvailableCoupons = async () => {
+    if (!summary?.subtotal) return;
+    setShowAvailCoupons((v) => !v);
+    if (!availableCoupons.length) {
+      try {
+        const list = await getAvailableCoupons({ data: { orderSubtotal: summary.subtotal } });
+        setAvailableCoupons(list);
+      } catch {}
+    }
+  };
 
   const handleAddAddress = async (data: AddressForm) => {
     try {
@@ -128,6 +182,8 @@ function CheckoutPage() {
           },
           paymentMethod,
           customerGstin: isGstBusiness ? gstin : undefined,
+          couponCode: appliedCoupon ?? undefined,
+          useCoins,
         },
       });
       successOrderNumber = result.orderNumber;
@@ -311,6 +367,50 @@ function CheckoutPage() {
               )}
             </section>
 
+            {/* Coupon Code */}
+            <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Tag size={15} /> Apply Coupon</h2>
+              {appliedCoupon && !couponError ? (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <span className="text-sm font-semibold text-green-700">"{appliedCoupon}" applied</span>
+                  <button onClick={handleRemoveCoupon} className="text-green-600 hover:text-green-800"><X size={14} /></button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError(null); }}
+                    placeholder="Enter coupon code"
+                    className="flex-1 rounded border border-gray-200 px-3 py-2 text-sm outline-none focus:border-[var(--maroon)] uppercase"
+                  />
+                  <button onClick={handleApplyCoupon} disabled={!couponInput.trim()} className="rounded bg-[var(--maroon)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40">Apply</button>
+                </div>
+              )}
+              {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+              {summary?.subtotal > 0 && (
+                <button onClick={loadAvailableCoupons} className="text-xs text-[var(--maroon)] font-medium flex items-center gap-1 hover:underline">
+                  <ChevronDown size={12} /> View available coupons
+                </button>
+              )}
+              {showAvailCoupons && availableCoupons.length > 0 && (
+                <div className="space-y-2 mt-1">
+                  {availableCoupons.map((c) => (
+                    <div key={c.code} className="flex items-center justify-between rounded border border-dashed border-gray-200 px-3 py-2 text-sm">
+                      <div>
+                        <span className="font-mono font-bold text-[var(--maroon)] mr-2">{c.code}</span>
+                        <span className="text-gray-600 text-xs">{c.description || (c.type === "percent" ? `${c.value}% off` : `₹${c.value / 100} off`)}</span>
+                        {c.minOrder > 0 && <span className="text-xs text-gray-400 ml-1">· min ₹{c.minOrder / 100}</span>}
+                      </div>
+                      <button onClick={() => { setCouponInput(c.code); setAppliedCoupon(c.code); setShowAvailCoupons(false); }} className="text-xs text-[var(--maroon)] font-semibold hover:underline">Apply</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showAvailCoupons && availableCoupons.length === 0 && (
+                <p className="text-xs text-gray-400">No coupons available for this order</p>
+              )}
+            </section>
+
             {/* Business GST */}
             <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
               <h2 className="font-semibold text-gray-800">Business Purchase (optional)</h2>
@@ -355,6 +455,25 @@ function CheckoutPage() {
                 </label>
               )}
             </section>
+
+            {/* Coins */}
+            {coinBalance > 0 && (
+              <section className="bg-white rounded-lg border border-gray-200 p-5">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-800 text-sm">Use My Coins</span>
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{coinBalance} coins</span>
+                  </div>
+                  <input type="checkbox" checked={useCoins} onChange={(e) => setUseCoins(e.target.checked)} className="w-4 h-4 accent-[var(--maroon)]" />
+                </label>
+                {useCoins && summary?.coinsValue > 0 && (
+                  <p className="text-xs text-green-600 mt-2">Saving {inrFromPaise(summary.coinsValue)} ({summary.coinsUsed} coins · max {summary.maxCoinsPct}% of order)</p>
+                )}
+                {useCoins && !summary?.coinsValue && (
+                  <p className="text-xs text-gray-400 mt-2">Coins applied after coupon/referral discounts</p>
+                )}
+              </section>
+            )}
           </div>
 
           {/* Right: Order Summary */}
@@ -408,6 +527,24 @@ function CheckoutPage() {
                     </div>
                     {summary.shipping === 0 && summary.freeShippingAbove > 0 && (
                       <p className="text-xs text-green-600">🎉 Free shipping on orders above {inrFromPaise(summary.freeShippingAbove)}</p>
+                    )}
+                    {summary.couponDiscount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Coupon ({summary.couponCode})</span>
+                        <span>-{inrFromPaise(summary.couponDiscount)}</span>
+                      </div>
+                    )}
+                    {summary.coinsValue > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Coins ({summary.coinsUsed})</span>
+                        <span>-{inrFromPaise(summary.coinsValue)}</span>
+                      </div>
+                    )}
+                    {summary.referralDiscount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Welcome Discount</span>
+                        <span>-{inrFromPaise(summary.referralDiscount)}</span>
+                      </div>
                     )}
                     <div className="border-t pt-2 flex justify-between font-bold text-base">
                       <span>Total</span>
