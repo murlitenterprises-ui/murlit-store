@@ -106,52 +106,39 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 const viewTransitionCSS = `
-/* Keep header and category strip static */
+/* Keep header and category strip static during any transition */
 ::view-transition-group(site-header), ::view-transition-group(category-strip) { animation: none; }
 ::view-transition-old(site-header), ::view-transition-old(category-strip) { display: none; }
 ::view-transition-new(site-header), ::view-transition-new(category-strip) { animation: none; }
 
-/* Root: base reset */
+/* Root: all transitions are instant by default — NO flip unless type="forward" is set */
 ::view-transition-group(root) { animation: none; }
 ::view-transition-image-pair(root) { isolation: auto; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; opacity: 1; }
 
-/* ── FORWARD (default): old page turns away left, new page comes up underneath ── */
-::view-transition-old(root) {
+/* ── FORWARD flip — ONLY when navigating away from home (type="forward") ── */
+/* Modern browsers: :active-view-transition-type */
+html:active-view-transition-type(forward)::view-transition-old(root) {
   z-index: 2;
   transform-origin: left center;
   backface-visibility: hidden;
   animation: murlit-page-turn 1.3s cubic-bezier(0.645, 0.045, 0.355, 1) both;
 }
-::view-transition-new(root) {
+html:active-view-transition-type(forward)::view-transition-new(root) {
   z-index: 1;
   animation: murlit-page-under 1.3s ease-out both;
 }
 
-/* ── BACK via :active-view-transition-type (modern browsers) ── */
-html:active-view-transition-type(back)::view-transition-old(root) {
-  z-index: 1;
-  transform-origin: left center;
-  animation: murlit-page-under-out 1.3s ease-in both;
-}
-html:active-view-transition-type(back)::view-transition-new(root) {
+/* Fallback for browsers without :active-view-transition-type */
+html[data-nav-direction="forward"] ::view-transition-old(root) {
   z-index: 2;
   transform-origin: left center;
   backface-visibility: hidden;
-  animation: murlit-page-turn-in 1.3s cubic-bezier(0.645, 0.045, 0.355, 1) both;
+  animation: murlit-page-turn 1.3s cubic-bezier(0.645, 0.045, 0.355, 1) both;
 }
-
-/* ── BACK via data attribute (fallback) — separate rule block so unknown :active-view-transition-type doesn't break this ── */
-html[data-nav-direction="back"] ::view-transition-old(root) {
+html[data-nav-direction="forward"] ::view-transition-new(root) {
   z-index: 1;
-  transform-origin: left center;
-  animation: murlit-page-under-out 1.3s ease-in both;
-}
-html[data-nav-direction="back"] ::view-transition-new(root) {
-  z-index: 2;
-  transform-origin: left center;
-  backface-visibility: hidden;
-  animation: murlit-page-turn-in 1.3s cubic-bezier(0.645, 0.045, 0.355, 1) both;
+  animation: murlit-page-under 1.3s ease-out both;
 }
 
 /* ── Keyframes ── */
@@ -160,34 +147,22 @@ html[data-nav-direction="back"] ::view-transition-new(root) {
   35%  { transform: perspective(2200px) rotateY(-25deg);  filter: brightness(0.95); box-shadow: -25px 0 50px rgba(60,20,10,0.35); }
   100% { transform: perspective(2200px) rotateY(-100deg); filter: brightness(0.55); box-shadow: -60px 0 90px rgba(60,20,10,0.5); }
 }
-@keyframes murlit-page-turn-in {
-  0%   { transform: perspective(2200px) rotateY(-100deg); filter: brightness(0.55); box-shadow: -60px 0 90px rgba(60,20,10,0.5); }
-  65%  { transform: perspective(2200px) rotateY(-25deg);  filter: brightness(0.95); }
-  100% { transform: perspective(2200px) rotateY(0deg);    filter: brightness(1);    box-shadow: 0 0 0 rgba(0,0,0,0); }
-}
 @keyframes murlit-page-under {
   0%   { filter: brightness(0.6); transform: scale(0.97); }
   100% { filter: brightness(1);   transform: scale(1); }
 }
-@keyframes murlit-page-under-out {
-  0%   { filter: brightness(1);   transform: scale(1); }
-  100% { filter: brightness(0.6); transform: scale(0.97); }
-}
 
 @media (max-width: 767px) {
-  ::view-transition-old(root) { animation-duration: 0.7s; }
-  ::view-transition-new(root) { animation-duration: 0.7s; }
-  html:active-view-transition-type(back)::view-transition-old(root) { animation-duration: 0.7s; }
-  html:active-view-transition-type(back)::view-transition-new(root) { animation-duration: 0.7s; }
-  html[data-nav-direction="back"] ::view-transition-old(root) { animation-duration: 0.7s; }
-  html[data-nav-direction="back"] ::view-transition-new(root) { animation-duration: 0.7s; }
+  html:active-view-transition-type(forward)::view-transition-old(root) { animation-duration: 0.7s; }
+  html:active-view-transition-type(forward)::view-transition-new(root) { animation-duration: 0.7s; }
+  html[data-nav-direction="forward"] ::view-transition-old(root) { animation-duration: 0.7s; }
+  html[data-nav-direction="forward"] ::view-transition-new(root) { animation-duration: 0.7s; }
 }
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-  html:active-view-transition-type(back)::view-transition-old(root) { animation: none; }
-  html:active-view-transition-type(back)::view-transition-new(root) { animation: none; }
-  html[data-nav-direction="back"] ::view-transition-old(root) { animation: none; }
-  html[data-nav-direction="back"] ::view-transition-new(root) { animation: none; }
+  html:active-view-transition-type(forward)::view-transition-old(root) { animation: none; }
+  html:active-view-transition-type(forward)::view-transition-new(root) { animation: none; }
+  html[data-nav-direction="forward"] ::view-transition-old(root) { animation: none; }
+  html[data-nav-direction="forward"] ::view-transition-new(root) { animation: none; }
 }
 `;
 
