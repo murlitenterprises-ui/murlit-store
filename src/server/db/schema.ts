@@ -253,6 +253,7 @@ export const orders = pgTable("orders", {
   uniqueIndex("orders_invoice_number_idx").on(t.invoiceNumber),
   index("orders_user_idx").on(t.userId),
   index("orders_status_idx").on(t.status),
+  index("orders_created_at_idx").on(t.createdAt),
 ]);
 
 // ─── Order Items ──────────────────────────────────────────────────────────────

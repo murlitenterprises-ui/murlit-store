@@ -30,7 +30,13 @@ async function attachImages(rows: Omit<ProductRow, "imageUrl">[]): Promise<Produ
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+let _navCatsCache: { data: CategoryTree[]; expiresAt: number } | null = null;
+
 export async function getNavCategories(): Promise<CategoryTree[]> {
+  if (_navCatsCache && Date.now() < _navCatsCache.expiresAt) {
+    return _navCatsCache.data;
+  }
+
   const all = await db
     .select()
     .from(categories)
@@ -40,7 +46,7 @@ export async function getNavCategories(): Promise<CategoryTree[]> {
   const tops = all.filter((c) => c.parentId === null);
   const subs = all.filter((c) => c.parentId !== null);
 
-  return tops.map((t) => ({
+  const result = tops.map((t) => ({
     id: t.id,
     name: t.name,
     slug: t.slug,
@@ -57,6 +63,9 @@ export async function getNavCategories(): Promise<CategoryTree[]> {
         sortOrder: s.sortOrder,
       })),
   }));
+
+  _navCatsCache = { data: result, expiresAt: Date.now() + 60_000 }; // 1-minute TTL
+  return result;
 }
 
 export async function getCategoryBySlug(slug: string): Promise<CategoryTree | null> {
@@ -244,41 +253,36 @@ export async function getProductBySlug(slug: string) {
 
   if (!prod) return null;
 
-  // Images
-  const imgs = await db
-    .select()
-    .from(productImages)
-    .where(eq(productImages.productId, prod.id))
-    .orderBy(asc(productImages.sortOrder));
-
-  // Category
-  const cat = prod.categoryId
-    ? (
-        await db
+  // Fetch images + category in parallel
+  const [imgs, catRow] = await Promise.all([
+    db
+      .select()
+      .from(productImages)
+      .where(eq(productImages.productId, prod.id))
+      .orderBy(asc(productImages.sortOrder)),
+    prod.categoryId
+      ? db
           .select({ id: categories.id, name: categories.name, slug: categories.slug, parentId: categories.parentId })
           .from(categories)
           .where(eq(categories.id, prod.categoryId))
           .limit(1)
-      )[0] ?? null
-    : null;
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+  ]);
 
-  // Find top-level category for related products lookup
+  const cat = catRow;
+
+  // Resolve top-level category + sub-category IDs in one query
   let topCategoryId: string | null = null;
   if (cat) {
     if (cat.parentId === null) {
       topCategoryId = cat.id;
     } else {
-      // cat is a sub-category, find top-level category
-      const [topCat] = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.id, cat.parentId))
-        .limit(1);
-      topCategoryId = topCat?.id ?? null;
+      topCategoryId = cat.parentId;
     }
   }
 
-  // Related products from same category (excluding this product)
+  // Fetch all categories once to get siblings — reuse for both sub-id lookup and related
   let related: ProductRow[] = [];
   if (topCategoryId) {
     const subIds = (

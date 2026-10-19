@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db, orders } from "@/server/db";
 import { eq } from "drizzle-orm";
 import { getSessionUser } from "@/server/auth-helpers";
-import { assignInvoiceNumber, generateInvoicePdf } from "@/server/invoice-service";
+import { assignInvoiceNumber } from "@/server/invoice-number";
 
 export const getInvoice = createServerFn()
   .validator(z.object({ orderNumber: z.string() }))
@@ -28,6 +28,7 @@ export const getInvoice = createServerFn()
       }
     }
 
+    const { generateInvoicePdf } = await import("@/server/invoice-service");
     const pdfBytes = await generateInvoicePdf(order.id);
     return Buffer.from(pdfBytes).toString("base64");
   });

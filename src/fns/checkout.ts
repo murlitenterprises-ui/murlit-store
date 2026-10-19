@@ -6,7 +6,7 @@ import { eq, and, inArray, count } from "drizzle-orm";
 import { requireUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
 import { INDIAN_STATES } from "@/lib/india-states";
-import { assignInvoiceNumber } from "@/server/invoice-service";
+import { assignInvoiceNumber } from "@/server/invoice-number";
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
 import { validateCoupon } from "@/server/coupon-helpers";
 import { getCoinBalanceForUser } from "@/server/referral-helpers";
