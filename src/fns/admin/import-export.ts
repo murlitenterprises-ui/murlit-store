@@ -4,7 +4,12 @@ import { z } from "zod";
 import { requireAdmin } from "@/server/auth-helpers";
 import { db, products, productImages, categories } from "@/server/db";
 import { eq, inArray, asc } from "drizzle-orm";
-import * as XLSX from "xlsx";
+type XLSXModule = typeof import("xlsx");
+let _xlsx: XLSXModule | null = null;
+async function getXLSX(): Promise<XLSXModule> {
+  if (!_xlsx) _xlsx = await import("xlsx");
+  return _xlsx;
+}
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
@@ -40,6 +45,7 @@ const HELP_ROWS = [
 
 export const downloadTemplate = createServerFn().handler(async () => {
   await requireAdmin();
+  const XLSX = await getXLSX();
 
   const allCats = await db
     .select({ name: categories.name, slug: categories.slug })
@@ -141,8 +147,9 @@ export const previewImport = createServerFn({ method: "POST" })
     if (fileBase64.length > 2_800_000) throw new Error("File too large (max 2 MB)");
 
     // Parse workbook
+    const XLSX = await getXLSX();
     const buf = Buffer.from(fileBase64, "base64");
-    let wb: XLSX.WorkBook;
+    let wb: ReturnType<typeof XLSX.read>;
     try {
       wb = XLSX.read(buf, { type: "buffer" });
     } catch {
@@ -471,6 +478,7 @@ export const executeImport = createServerFn({ method: "POST" })
 
 export const exportProducts = createServerFn().handler(async () => {
   await requireAdmin();
+  const XLSX = await getXLSX();
 
   const allProds = await db
     .select()
@@ -555,6 +563,7 @@ export const generateErrorReport = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin();
+    const XLSX = await getXLSX();
     const errorRows = data.rows.filter((r) => !r.valid);
     const wb = XLSX.utils.book_new();
     const wsData = [

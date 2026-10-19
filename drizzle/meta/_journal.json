@@ -43,6 +43,13 @@
       "when": 1792382734047,
       "tag": "0005_petite_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792395824792,
+      "tag": "0006_flat_machine_man",
+      "breakpoints": true
     }
   ]
 }

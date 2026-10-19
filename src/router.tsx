@@ -9,17 +9,28 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    defaultPreload: "intent",
+    defaultPreloadStaleTime: 30_000,
     defaultViewTransition: {
       types: ({ fromLocation, toLocation }: { fromLocation: any; toLocation: any }) => {
         const fromIndex: number = fromLocation?.state?.__TSR_index ?? 0;
         const toIndex: number = toLocation?.state?.__TSR_index ?? 0;
-        // Going to "/" from a deeper page also feels like going back
-        const goingHome =
-          toLocation.pathname === "/" && (fromLocation?.pathname ?? "/") !== "/";
-        const isBack = toIndex < fromIndex || goingHome;
+        const fromPath = fromLocation?.pathname ?? "/";
+        const toPath = toLocation?.pathname ?? "/";
 
-        // Set data attribute as fallback for browsers that don't support :active-view-transition-type
+        // Page-flip ONLY when leaving home "/" (never on back, never between other pages)
+        const leavingHome = fromPath === "/" && toPath !== "/";
+        if (!leavingHome) {
+          // Clear any stale data attribute and return no transition
+          if (typeof document !== "undefined") {
+            delete document.documentElement.dataset.navDirection;
+          }
+          return [];
+        }
+
+        const goingHome = toPath === "/" && fromPath !== "/";
+        const isBack = (toIndex < fromIndex) || goingHome;
+
         if (typeof document !== "undefined") {
           if (isBack) {
             document.documentElement.dataset.navDirection = "back";
