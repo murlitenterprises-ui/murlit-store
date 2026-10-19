@@ -116,26 +116,21 @@ export async function listProducts(opts: {
   const pageSize = opts.pageSize ?? 24;
   const offset = (page - 1) * pageSize;
 
-  // Resolve category id from slug if provided
+  // Resolve category id from slug if provided — run both lookups in parallel
   let categoryId: string | null = null;
   let subCategoryId: string | null = null;
 
-  if (opts.categorySlug) {
-    const [cat] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.slug, opts.categorySlug))
-      .limit(1);
-    categoryId = cat?.id ?? null;
-  }
-
-  if (opts.subSlug) {
-    const [sub] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.slug, opts.subSlug))
-      .limit(1);
-    subCategoryId = sub?.id ?? null;
+  if (opts.categorySlug || opts.subSlug) {
+    const [catRow, subRow] = await Promise.all([
+      opts.categorySlug
+        ? db.select({ id: categories.id }).from(categories).where(eq(categories.slug, opts.categorySlug)).limit(1).then((r) => r[0] ?? null)
+        : Promise.resolve(null),
+      opts.subSlug
+        ? db.select({ id: categories.id }).from(categories).where(eq(categories.slug, opts.subSlug)).limit(1).then((r) => r[0] ?? null)
+        : Promise.resolve(null),
+    ]);
+    categoryId = catRow?.id ?? null;
+    subCategoryId = subRow?.id ?? null;
   }
 
   // Build where conditions

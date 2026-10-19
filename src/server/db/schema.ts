@@ -86,6 +86,9 @@ export const products = pgTable("products", {
   index("products_category_idx").on(t.categoryId),
   index("products_active_idx").on(t.isActive),
   index("products_featured_idx").on(t.isFeatured),
+  index("products_active_category_idx").on(t.isActive, t.categoryId),
+  index("products_active_featured_idx").on(t.isActive, t.isFeatured),
+  index("products_active_created_idx").on(t.isActive, t.createdAt),
 ]);
 
 // ─── Product Images ───────────────────────────────────────────────────────────

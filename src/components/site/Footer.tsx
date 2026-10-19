@@ -1,6 +1,6 @@
 import { SeoLinks } from "./SeoLinks";
 import { Link } from "@tanstack/react-router";
-import logoFull from "@/assets/logo-full.png";
+import logoFull from "@/assets/logo-full.webp";
 import { Instagram, Facebook, Youtube, Linkedin, Phone, Mail, MessageCircle } from "lucide-react";
 
 type NavLink = { label: string; href: string };

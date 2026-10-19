@@ -2,19 +2,21 @@
 import { db, orders, orderItems, storeSettings } from "@/server/db";
 import { eq } from "drizzle-orm";
 import { inrInWords } from "@/lib/financial-year";
-import { PDFDocument, rgb, StandardFonts, type PDFFont } from "pdf-lib";
+import type { PDFFont } from "pdf-lib";
 
 // ─── Generate PDF invoice ─────────────────────────────────────────────────────
+
+type RGBColor = ReturnType<import("pdf-lib")["rgb"]>;
 
 function fmt(paise: number): string {
   return "Rs. " + (paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function drawLine(page: any, x1: number, y: number, x2: number, color = rgb(0.8, 0.8, 0.8), thickness = 0.5) {
+function drawLine(page: any, x1: number, y: number, x2: number, color?: RGBColor, thickness = 0.5) {
   page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness, color });
 }
 
-function drawText(page: any, text: string, x: number, y: number, font: PDFFont, size: number, color = rgb(0, 0, 0)) {
+function drawText(page: any, text: string, x: number, y: number, font: PDFFont, size: number, color?: RGBColor) {
   page.drawText(text, { x, y, font, size, color });
 }
 
@@ -22,8 +24,13 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) throw new Error("Order not found");
 
-  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-  const [settings] = await db.select().from(storeSettings).limit(1);
+  const [[items, settings], { PDFDocument, rgb, StandardFonts }] = await Promise.all([
+    Promise.all([
+      db.select().from(orderItems).where(eq(orderItems.orderId, order.id)),
+      db.select().from(storeSettings).limit(1).then((r) => r[0]),
+    ]),
+    import("pdf-lib"),
+  ]);
 
   const addr = order.shippingAddress as Record<string, string>;
   const isSameState = order.taxType === "CGST_SGST";
