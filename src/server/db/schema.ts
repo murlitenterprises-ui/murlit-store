@@ -1,6 +1,6 @@
 import {
   pgTable, pgEnum,
-  uuid, text, integer, boolean, jsonb, timestamp, uniqueIndex, index,
+  uuid, text, integer, boolean, jsonb, timestamp, uniqueIndex, index, numeric,
 } from "drizzle-orm/pg-core";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -31,6 +31,8 @@ export const couponTypeEnum = pgEnum("coupon_type", ["percent", "flat"]);
 export const coinLedgerTypeEnum = pgEnum("coin_ledger_type", ["earn", "spend", "reverse", "expire", "admin_adjust"]);
 
 export const enquiryTypeEnum = pgEnum("enquiry_type", ["custom", "bulk", "contact"]);
+
+export const offerTypeEnum = pgEnum("offer_type", ["welcome", "loyalty", "cart_value", "sitewide", "bank"]);
 
 export const enquiryStatusEnum = pgEnum("enquiry_status", [
   "new", "in_progress", "closed",
@@ -79,6 +81,9 @@ export const products = pgTable("products", {
   priceIncludesGst: boolean("price_includes_gst").notNull().default(true),
   seoTitle:         text("seo_title"),
   seoDescription:   text("seo_description"),
+  // USD pricing (optional fixed price)
+  priceUsdCents:    integer("price_usd_cents"),         // null = use exchange rate
+  compareAtUsdCents: integer("compare_at_usd_cents"),   // null = use exchange rate
   ...timestamps,
 }, (t) => [
   uniqueIndex("products_slug_idx").on(t.slug),
@@ -245,11 +250,13 @@ export const orders = pgTable("orders", {
   shippingAddress:  jsonb("shipping_address").notNull(), // snapshot
   invoiceNumber:    text("invoice_number"),
   invoiceDate:      timestamp("invoice_date", { withTimezone: true }),
-  couponCode:       text("coupon_code"),
-  couponDiscount:   integer("coupon_discount").notNull().default(0),  // paise
-  coinsUsed:        integer("coins_used").notNull().default(0),        // number of coins
-  coinsValue:       integer("coins_value").notNull().default(0),       // paise value
-  referralDiscount: integer("referral_discount").notNull().default(0), // paise
+  couponCode:         text("coupon_code"),
+  couponDiscount:     integer("coupon_discount").notNull().default(0),     // paise
+  coinsUsed:          integer("coins_used").notNull().default(0),           // number of coins
+  coinsValue:         integer("coins_value").notNull().default(0),          // paise value
+  referralDiscount:   integer("referral_discount").notNull().default(0),   // paise
+  appliedOfferId:     uuid("applied_offer_id"),                              // FK to offers
+  offerDiscountPaise: integer("offer_discount_paise").notNull().default(0), // paise
   ...timestamps,
 }, (t) => [
   uniqueIndex("orders_order_number_idx").on(t.orderNumber),
@@ -257,6 +264,7 @@ export const orders = pgTable("orders", {
   index("orders_user_idx").on(t.userId),
   index("orders_status_idx").on(t.status),
   index("orders_created_at_idx").on(t.createdAt),
+  index("orders_applied_offer_idx").on(t.appliedOfferId),
 ]);
 
 // ─── Order Items ──────────────────────────────────────────────────────────────
@@ -311,6 +319,7 @@ export const storeSettings = pgTable("store_settings", {
   coinValuePaise:           integer("coin_value_paise").notNull().default(100),           // paise per coin (₹1)
   maxCoinsPctPerOrder:      integer("max_coins_pct_per_order").notNull().default(20),     // % of order value
   coinExpiryDays:           integer("coin_expiry_days").notNull().default(365),
+  maxTotalDiscountPercent:  integer("max_total_discount_percent").notNull().default(20),
   ...timestamps,
 });
 
@@ -347,6 +356,7 @@ export const coupons = pgTable("coupons", {
   perUserLimit: integer("per_user_limit"),           // null = unlimited
   firstOrderOnly: boolean("first_order_only").notNull().default(false),
   description: text("description"),
+  isPublic:    boolean("is_public").notNull().default(true),
   ...timestamps,
 }, (t) => [
   uniqueIndex("coupons_code_idx").on(t.code),
@@ -406,6 +416,42 @@ export const coinLedger = pgTable("coin_ledger", {
 }, (t) => [
   index("coin_ledger_user_idx").on(t.userId),
   index("coin_ledger_order_idx").on(t.orderId),
+]);
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+// ─── Exchange Rates ───────────────────────────────────────────────────────────
+
+export const exchangeRates = pgTable("exchange_rates", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  currency:   text("currency").notNull(),      // "USD", "EUR", etc.
+  ratePerInr: numeric("rate_per_inr", { precision: 18, scale: 8 }).notNull(),
+  isManual:   boolean("is_manual").notNull().default(false),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("exchange_rates_currency_idx").on(t.currency),
+]);
+
+// ─── Offers ───────────────────────────────────────────────────────────────────
+
+export const offers = pgTable("offers", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  key:              text("key").notNull(),          // unique slug e.g. "welcome"
+  type:             offerTypeEnum("type").notNull(),
+  title:            text("title").notNull(),
+  description:      text("description"),
+  tagText:          text("tag_text"),               // e.g. "10% OFF"
+  percent:          integer("percent").notNull(),
+  maxDiscountPaise: integer("max_discount_paise"),  // null = no cap
+  minOrderPaise:    integer("min_order_paise").notNull().default(0),
+  minPastOrders:    integer("min_past_orders").notNull().default(0),
+  startsAt:         timestamp("starts_at", { withTimezone: true }),
+  endsAt:           timestamp("ends_at", { withTimezone: true }),
+  isActive:         boolean("is_active").notNull().default(false),
+  sortOrder:        integer("sort_order").notNull().default(0),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex("offers_key_idx").on(t.key),
 ]);
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────

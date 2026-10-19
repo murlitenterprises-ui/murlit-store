@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Tag } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { useCart } from "@/lib/cart-context";
-import { inrFromPaise } from "@/lib/format";
+import { Price } from "@/components/site/Price";
+import { useCurrency } from "@/lib/currency-context";
+import { formatPrice } from "@/lib/currency";
 import { clImg } from "@/lib/cloudinary";
 
 export const Route = createFileRoute("/cart")({
@@ -12,6 +14,7 @@ export const Route = createFileRoute("/cart")({
 
 function CartPage() {
   const { items, count, isLoading, update, remove } = useCart();
+  const { currency, rates } = useCurrency();
 
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
 
@@ -70,9 +73,9 @@ function CartPage() {
                         </button>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-bold text-gray-900">{inrFromPaise(item.price * item.qty)}</span>
+                        <Price paise={item.price * item.qty} className="font-bold text-gray-900" />
                         {item.qty > 1 && (
-                          <span className="text-xs text-gray-400">{inrFromPaise(item.price)} each</span>
+                          <Price paise={item.price} className="text-xs text-gray-400" />
                         )}
                         <button
                           onClick={() => remove(item.id)}
@@ -101,17 +104,31 @@ function CartPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">{count} item{count !== 1 ? "s" : ""}</span>
-                    <span className="font-medium">{inrFromPaise(subtotal)}</span>
+                    <Price paise={subtotal} className="font-medium" />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Shipping</span>
                     <span className="text-gray-500 text-xs italic">Calculated at checkout</span>
                   </div>
                 </div>
+                {/* Apply Coupons & Offers row */}
+                <Link
+                  to="/checkout"
+                  search={{ offersOpen: "1" } as any}
+                  className="mt-3 flex items-center justify-between rounded-md border border-dashed border-maroon/40 bg-maroon/5 px-3 py-2.5 text-sm hover:bg-maroon/10 transition"
+                >
+                  <span className="flex items-center gap-2 font-medium text-maroon">
+                    <Tag className="h-4 w-4" />Apply Coupons &amp; Offers
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-maroon" />
+                </Link>
                 <div className="border-t mt-4 pt-4 flex justify-between font-bold text-base">
                   <span>Subtotal</span>
-                  <span>{inrFromPaise(subtotal)}</span>
+                  <Price paise={subtotal} />
                 </div>
+                {currency !== "INR" && (
+                  <p className="mt-1 text-xs text-muted-foreground">You will be charged ₹{(subtotal/100).toLocaleString("en-IN")} (approx {formatPrice(subtotal, currency, rates)}). Payment is in Indian Rupees.</p>
+                )}
                 <Link
                   to="/checkout"
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-sm bg-royal py-3.5 text-sm font-bold text-on-dark hover:brightness-110 transition"

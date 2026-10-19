@@ -5,10 +5,16 @@ import { z } from "zod";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getStoreSettings, saveStoreSettings } from "@/fns/admin/settings";
+import { getExchangeRatesAdmin, refreshRatesAdmin, setManualRateAdmin, clearManualRateAdmin } from "@/fns/currency";
 import { INDIAN_STATES } from "@/lib/india-states";
+import { CURRENCIES, type SupportedCurrency } from "@/lib/currency";
+import { RefreshCw, Edit2, RotateCcw } from "lucide-react";
 
 export const Route = createFileRoute("/admin/settings")({
-  loader: () => getStoreSettings(),
+  loader: async () => {
+    const [settings, ratesData] = await Promise.all([getStoreSettings(), getExchangeRatesAdmin()]);
+    return { settings, ratesData };
+  },
   component: SettingsPage,
 });
 
@@ -68,8 +74,138 @@ function SettingsField({
   );
 }
 
+function ExchangeRatesSection({ initialRows, initialMap }: { initialRows: any[]; initialMap: Record<string, number> }) {
+  const [rows, setRows] = useState(initialRows);
+  const [ratesMap, setRatesMap] = useState(initialMap);
+  const [refreshing, setRefreshing] = useState(false);
+  const [editCurrency, setEditCurrency] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const reload = async () => {
+    const data = await getExchangeRatesAdmin();
+    setRows(data.rows);
+    setRatesMap(data.ratesMap);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await refreshRatesAdmin();
+      if (res.ok) { toast.success("Exchange rates refreshed"); await reload(); }
+      else toast.error("Could not fetch live rates — kept existing");
+    } catch (e: any) { toast.error(e?.message); }
+    finally { setRefreshing(false); }
+  };
+
+  const handleSaveManual = async (currency: string) => {
+    const rate = parseFloat(editValue);
+    if (isNaN(rate) || rate <= 0) { toast.error("Enter a valid rate (> 0)"); return; }
+    try {
+      await setManualRateAdmin({ data: { currency, rate } });
+      toast.success(`${currency} rate saved`);
+      setEditCurrency(null);
+      await reload();
+    } catch (e: any) { toast.error(e?.message); }
+  };
+
+  const handleClearManual = async (currency: string) => {
+    try {
+      await clearManualRateAdmin({ data: { currency } });
+      toast.success(`${currency} override cleared`);
+      await reload();
+    } catch (e: any) { toast.error(e?.message); }
+  };
+
+  const currencies = Object.keys(CURRENCIES).filter((c) => c !== "INR") as SupportedCurrency[];
+
+  return (
+    <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">Exchange Rates</h2>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 rounded border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          Refresh now
+        </button>
+      </div>
+      <p className="text-xs text-gray-400">Rates are per 1 INR (how much foreign currency 1 rupee buys). Auto-refreshed every 24 h from open.er-api.com.</p>
+      <div className="overflow-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-xs text-gray-500">
+              <th className="pb-2 text-left">Currency</th>
+              <th className="pb-2 text-right">Rate per ₹1</th>
+              <th className="pb-2 text-right">Type</th>
+              <th className="pb-2 text-right">Updated</th>
+              <th className="pb-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {currencies.map((cur) => {
+              const row = rows.find((r: any) => r.currency === cur);
+              const rate = ratesMap[cur];
+              const isManual = row?.isManual ?? false;
+              const updatedAt = row?.updatedAt ? new Date(row.updatedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "—";
+              return (
+                <tr key={cur} className="border-b last:border-0">
+                  <td className="py-2 font-medium">{cur} {CURRENCIES[cur].symbol}</td>
+                  <td className="py-2 text-right font-mono">
+                    {editCurrency === cur ? (
+                      <input
+                        autoFocus
+                        type="number"
+                        step="0.00001"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="w-28 rounded border border-gray-200 px-2 py-1 text-xs text-right outline-none focus:border-[var(--maroon)]"
+                      />
+                    ) : (
+                      <span>{rate ? rate.toFixed(6) : "—"}</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    {isManual ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">Manual</span>
+                    ) : (
+                      <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Auto</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right text-xs text-gray-400">{updatedAt}</td>
+                  <td className="py-2 text-right">
+                    {editCurrency === cur ? (
+                      <div className="flex items-center gap-1 justify-end">
+                        <button type="button" onClick={() => handleSaveManual(cur)} className="text-xs text-white bg-[var(--maroon)] rounded px-2 py-0.5 hover:opacity-80">Save</button>
+                        <button type="button" onClick={() => setEditCurrency(null)} className="text-xs text-gray-500 hover:text-gray-800">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 justify-end">
+                        <button type="button" onClick={() => { setEditCurrency(cur); setEditValue(rate?.toFixed(6) ?? ""); }} className="p-1 text-gray-400 hover:text-[var(--maroon)]">
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                        {isManual && (
+                          <button type="button" onClick={() => handleClearManual(cur)} title="Clear manual override" className="p-1 text-amber-400 hover:text-amber-700">
+                            <RotateCcw className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function SettingsPage() {
-  const settings = Route.useLoaderData();
+  const { settings, ratesData } = Route.useLoaderData();
   const [saving, setSaving] = useState(false);
 
   const {
@@ -254,6 +390,8 @@ function SettingsPage() {
           <SettingsField label="Coin expiry (days)" name="coinExpiryDays" type="number" placeholder="365" register={register} errors={errors} />
         </div>
       </section>
+
+      <ExchangeRatesSection initialRows={ratesData.rows} initialMap={ratesData.ratesMap} />
 
       <button
         type="submit"

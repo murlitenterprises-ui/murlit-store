@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { orders, orderItems, products, storeSettings, carts, cartItems, orderHistory, couponUsages, coupons, coinLedger, users } from "@/server/db/schema";
+import { orders, orderItems, products, storeSettings, carts, cartItems, orderHistory, couponUsages, coupons, coinLedger, users, offers } from "@/server/db/schema";
 import { eq, and, inArray, count } from "drizzle-orm";
 import { requireUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
@@ -10,6 +10,7 @@ import { assignInvoiceNumber } from "@/server/invoice-number";
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
 import { validateCoupon } from "@/server/coupon-helpers";
 import { getCoinBalanceForUser } from "@/server/referral-helpers";
+import { getBestOffer } from "@/server/offer-helpers";
 
 // Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
 // Accepts: "DL", "Delhi", "07" (GSTIN prefix), "dl" — returns "DL" or the uppercased input as fallback.
@@ -111,6 +112,7 @@ export const getCheckoutSummary = createServerFn()
   .validator(z.object({
     shippingStateCode: z.string(),
     couponCode: z.string().optional(),
+    offerId: z.string().uuid().optional(),
     useCoins: z.boolean().optional(),
   }))
   .handler(async ({ data }) => {
@@ -187,10 +189,34 @@ export const getCheckoutSummary = createServerFn()
     if (referralEnabled) {
       const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
       if (userData?.referredBy) {
-        const [{ n: prevOrders }] = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
-        if (Number(prevOrders) === 0) {
+        const prevOrderRows = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
+        if (Number(prevOrderRows[0]?.n ?? 0) === 0) {
           referralDiscount = Math.min(referralWelcomeDiscount, subtotal);
         }
+      }
+    }
+
+    // ── Offer discount (auto best-offer or selected) ─────────────────────────────
+    const maxTotalDiscountPct = (settings as any)?.maxTotalDiscountPercent ?? 20;
+    const maxTotalDiscount = Math.floor((subtotal * maxTotalDiscountPct) / 100);
+    let offerDiscount = 0;
+    let appliedOfferId: string | null = null;
+    let appliedOfferTitle: string | null = null;
+    if (data.offerId) {
+      const { checkOfferEligibility } = await import("@/server/offer-helpers");
+      const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
+      if (res.eligible) {
+        offerDiscount = res.discount;
+        appliedOfferId = res.offerId;
+        appliedOfferTitle = res.title;
+      }
+    } else {
+      // Auto-apply best offer
+      const best = await getBestOffer(user.id, subtotal);
+      if (best) {
+        offerDiscount = best.discount;
+        appliedOfferId = best.offerId;
+        appliedOfferTitle = best.title;
       }
     }
 
@@ -198,7 +224,7 @@ export const getCheckoutSummary = createServerFn()
     let couponDiscount = 0;
     let couponResult: { valid: boolean; code?: string; discount?: number; error?: string; description?: string | null } = { valid: false };
     if (data.couponCode?.trim()) {
-      const res = await validateCoupon(data.couponCode, subtotal - referralDiscount, user.id);
+      const res = await validateCoupon(data.couponCode, subtotal - offerDiscount - referralDiscount, user.id);
       couponResult = res;
       if (res.valid) couponDiscount = res.discount;
     }
@@ -211,14 +237,36 @@ export const getCheckoutSummary = createServerFn()
     if (data.useCoins && referralEnabled) {
       const coinBalance = await getCoinBalanceForUser(user.id);
       const maxCoinsValue = Math.floor((subtotal * maxCoinsPct) / 100);
-      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - couponDiscount - referralDiscount);
+      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - offerDiscount - couponDiscount - referralDiscount);
       if (applicableValue > 0) {
         coinsValue = applicableValue;
         coinsUsed = Math.floor(coinsValue / coinValuePaise);
       }
     }
 
-    const totalDiscount = couponDiscount + coinsValue + referralDiscount;
+    // ── Hard 20% cap on combined discounts ───────────────────────────────────────
+    let totalDiscount = offerDiscount + couponDiscount + coinsValue + referralDiscount;
+    let capWarning = false;
+    if (totalDiscount > maxTotalDiscount) {
+      capWarning = true;
+      // Reduce coins first, then coupon, then offer
+      const overBy = totalDiscount - maxTotalDiscount;
+      if (coinsValue >= overBy) {
+        coinsValue -= overBy;
+        coinsUsed = Math.floor(coinsValue / coinValuePaise);
+      } else {
+        coinsValue = 0; coinsUsed = 0;
+        const remaining = overBy - coinsValue;
+        if (couponDiscount >= remaining) {
+          couponDiscount -= remaining;
+        } else {
+          couponDiscount = 0;
+          offerDiscount -= (remaining - couponDiscount);
+        }
+      }
+      totalDiscount = offerDiscount + couponDiscount + coinsValue + referralDiscount;
+    }
+
     const discountedSubtotal = Math.max(0, subtotal - totalDiscount);
 
     // Scale taxable/tax proportionally
@@ -239,6 +287,9 @@ export const getCheckoutSummary = createServerFn()
       shippingFee,
       freeShippingAbove,
       discount: totalDiscount,
+      offerDiscount,
+      appliedOfferId,
+      appliedOfferTitle,
       couponDiscount,
       coinsUsed,
       coinsValue,
@@ -269,6 +320,7 @@ const placeOrderSchema = z.object({
   customerGstin: z.string().optional(),
   businessName: z.string().optional(),
   couponCode: z.string().optional(),
+  offerId: z.string().uuid().optional(),
   useCoins: z.boolean().optional(),
 });
 
@@ -354,10 +406,30 @@ export const placeOrder = createServerFn()
     if (settings?.referralEnabled !== false) {
       const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
       if (userData?.referredBy) {
-        const [{ n: prevOrders }] = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
-        if (Number(prevOrders) === 0) {
+        const prevOrderRows2 = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
+        if (Number(prevOrderRows2[0]?.n ?? 0) === 0) {
           referralDiscount = Math.min(settings?.referralWelcomeDiscount ?? 5000, subtotal);
         }
+      }
+    }
+
+    // ── Offer validation (server re-validates) ───────────────────────────────────
+    const maxTotalDiscountPct2 = (settings as any)?.maxTotalDiscountPercent ?? 20;
+    const maxTotalDiscount2 = Math.floor((subtotal * maxTotalDiscountPct2) / 100);
+    let offerDiscountPl = 0;
+    let appliedOfferIdPl: string | null = null;
+    if (data.offerId) {
+      const { checkOfferEligibility } = await import("@/server/offer-helpers");
+      const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
+      if (res.eligible) {
+        offerDiscountPl = res.discount;
+        appliedOfferIdPl = res.offerId;
+      }
+    } else {
+      const best = await getBestOffer(user.id, subtotal);
+      if (best) {
+        offerDiscountPl = best.discount;
+        appliedOfferIdPl = best.offerId;
       }
     }
 
@@ -366,7 +438,7 @@ export const placeOrder = createServerFn()
     let validatedCouponCode: string | null = null;
     let couponId: string | null = null;
     if (data.couponCode?.trim()) {
-      const res = await validateCoupon(data.couponCode, subtotal - referralDiscount, user.id);
+      const res = await validateCoupon(data.couponCode, subtotal - offerDiscountPl - referralDiscount, user.id);
       if (!res.valid) throw new Error(res.error);
       couponDiscount = res.discount;
       validatedCouponCode = res.code;
@@ -382,14 +454,34 @@ export const placeOrder = createServerFn()
       const maxCoinsPct = settings?.maxCoinsPctPerOrder ?? 20;
       const coinBalance = await getCoinBalanceForUser(user.id);
       const maxCoinsValue = Math.floor((subtotal * maxCoinsPct) / 100);
-      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - couponDiscount - referralDiscount);
+      const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - offerDiscountPl - couponDiscount - referralDiscount);
       if (applicableValue > 0) {
         coinsValue = applicableValue;
         coinsUsed = Math.floor(coinsValue / coinValuePaise);
       }
     }
 
-    const totalDiscount = couponDiscount + coinsValue + referralDiscount;
+    // ── Hard 20% cap ──────────────────────────────────────────────────────────────
+    let totalDiscount = offerDiscountPl + couponDiscount + coinsValue + referralDiscount;
+    if (totalDiscount > maxTotalDiscount2) {
+      const overBy = totalDiscount - maxTotalDiscount2;
+      if (coinsValue >= overBy) {
+        coinsValue -= overBy;
+        const coinValuePaise = settings?.coinValuePaise ?? 100;
+        coinsUsed = Math.floor(coinsValue / coinValuePaise);
+      } else {
+        coinsValue = 0; coinsUsed = 0;
+        const remaining = overBy - coinsValue;
+        if (couponDiscount >= remaining) {
+          couponDiscount -= remaining;
+        } else {
+          couponDiscount = 0;
+          offerDiscountPl -= (remaining - couponDiscount);
+        }
+      }
+      totalDiscount = offerDiscountPl + couponDiscount + coinsValue + referralDiscount;
+    }
+
     const discountedSubtotal = Math.max(0, subtotal - totalDiscount);
 
     // Scale taxable/tax proportionally after discount
@@ -427,6 +519,8 @@ export const placeOrder = createServerFn()
         subtotal,
         shipping,
         discount: totalDiscount,
+        offerDiscountPaise: offerDiscountPl,
+        appliedOfferId: appliedOfferIdPl,
         couponDiscount,
         couponCode: validatedCouponCode,
         coinsUsed,

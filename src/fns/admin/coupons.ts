@@ -57,6 +57,7 @@ const couponSchema = z.object({
   firstOrderOnly: z.boolean().default(false),
   description: z.string().optional().nullable(),
   isActive: z.boolean().default(true),
+  isPublic: z.boolean().default(false),
 });
 
 export const createCoupon = createServerFn()
@@ -82,6 +83,7 @@ export const createCoupon = createServerFn()
       firstOrderOnly: data.firstOrderOnly,
       description: data.description ?? null,
       isActive: data.isActive,
+      isPublic: data.isPublic,
     }).returning();
     return row;
   });
@@ -112,6 +114,7 @@ export const updateCoupon = createServerFn()
       firstOrderOnly: data.firstOrderOnly,
       description: data.description ?? null,
       isActive: data.isActive,
+      isPublic: data.isPublic,
       updatedAt: new Date(),
     }).where(eq(coupons.id, data.id)).returning();
     return row;

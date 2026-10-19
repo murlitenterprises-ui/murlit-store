@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { createProduct, updateProduct, getAdminCategories } from "@/fns/admin/products";
 import { getCloudinarySignature, deleteCloudinaryImage } from "@/fns/admin/upload";
+import { getPublicExchangeRates } from "@/fns/currency";
 import { clImg } from "@/lib/cloudinary";
 import { discountPct } from "@/lib/format";
 import { Loader2, Upload, Trash2, ArrowUp, ArrowDown, Star } from "lucide-react";
@@ -19,6 +20,9 @@ const schema = z.object({
   description: z.string().optional(),
   priceRs: z.number().positive("Must be > 0"),
   mrpRs: z.number().min(0).optional(),
+  priceEnteredInUsd: z.boolean().default(false),
+  priceUsdDollars: z.number().positive().optional().nullable(),
+  compareAtUsdDollars: z.number().positive().optional().nullable(),
   sku: z.string().min(1, "Required"),
   stock: z.coerce.number().int().min(0).default(0),
   isActive: z.boolean().default(true),
@@ -294,6 +298,13 @@ export function ProductForm({
 }) {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [usdRate, setUsdRate] = useState<number>(0.012); // rate: 1 INR paise -> USD cents
+  // Load exchange rate for USD auto-fill
+  useEffect(() => {
+    getPublicExchangeRates().then((rates) => {
+      if (rates.USD) setUsdRate(rates.USD);
+    }).catch(() => {});
+  }, []);
   const [images, setImages] = useState<ImageEntry[]>(
     product?.images.map((img) => ({
       id: img.id,
@@ -315,6 +326,9 @@ export function ProductForm({
       description: product?.description ?? "",
       priceRs: product ? product.price / 100 : 0,
       mrpRs: product?.mrp ? product.mrp / 100 : undefined,
+      priceEnteredInUsd: false,
+      priceUsdDollars: (product as any)?.priceUsdCents ? (product as any).priceUsdCents / 100 : null,
+      compareAtUsdDollars: (product as any)?.compareAtUsdCents ? (product as any).compareAtUsdCents / 100 : null,
       sku: product?.sku ?? "",
       stock: product?.stock ?? 0,
       isActive: product?.isActive ?? true,
@@ -343,6 +357,8 @@ export function ProductForm({
   const watchPriceRs = watch("priceRs");
   const watchMrpRs = watch("mrpRs");
   const watchCatId = watch("categoryId");
+  const watchPriceEnteredInUsd = watch("priceEnteredInUsd");
+  const watchPriceUsdDollars = watch("priceUsdDollars");
   const watchSeoTitle = watch("seoTitle");
   const watchSeoDesc = watch("seoDescription");
 
@@ -404,6 +420,8 @@ export function ProductForm({
         priceIncludesGst: data.priceIncludesGst,
         seoTitle: data.seoTitle || undefined,
         seoDescription: data.seoDescription || undefined,
+        priceUsdCents: data.priceUsdDollars ? Math.round(data.priceUsdDollars * 100) : undefined,
+        compareAtUsdCents: data.compareAtUsdDollars ? Math.round(data.compareAtUsdDollars * 100) : undefined,
         images: readyImages.map((img, i) => ({
           id: img.id,
           url: img.url,
@@ -467,27 +485,65 @@ export function ProductForm({
 
       {/* Pricing */}
       <Section title="Pricing">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-sm font-medium text-gray-700">Price entered in:</span>
+          <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+            <input type="radio" {...register("priceEnteredInUsd")} value="false" checked={!watchPriceEnteredInUsd} onChange={() => setValue("priceEnteredInUsd", false)} />
+            ₹ INR
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+            <input type="radio" {...register("priceEnteredInUsd")} value="true" checked={!!watchPriceEnteredInUsd} onChange={() => setValue("priceEnteredInUsd", true)} />
+            $ USD
+          </label>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Selling Price (₹)" required error={errors.priceRs?.message}>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              {...register("priceRs", { valueAsNumber: true })}
-              className={inp}
-              placeholder="299.00"
-            />
-          </Field>
-          <Field label="MRP (₹)" hint="Optional – leave blank if no discount">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              {...register("mrpRs", { valueAsNumber: true })}
-              className={inp}
-              placeholder="399.00"
-            />
-          </Field>
+          {!watchPriceEnteredInUsd ? (
+            <>
+              <Field label="Selling Price (₹)" required error={errors.priceRs?.message}>
+                <input
+                  type="number" step="0.01" min="0"
+                  {...register("priceRs", { valueAsNumber: true })}
+                  className={inp} placeholder="299.00"
+                />
+                {watchPriceRs > 0 && (
+                  <p className="text-xs text-gray-400 mt-0.5">≈ ${((watchPriceRs * 100) * usdRate).toFixed(2)}</p>
+                )}
+              </Field>
+              <Field label="MRP (₹)" hint="Optional – leave blank if no discount">
+                <input type="number" step="0.01" min="0" {...register("mrpRs", { valueAsNumber: true })} className={inp} placeholder="399.00" />
+              </Field>
+              <Field label="Fixed USD price (optional)" hint="If set, US customers see this exact price">
+                <input type="number" step="0.01" min="0" {...register("priceUsdDollars", { valueAsNumber: true })} className={inp} placeholder="3.99" />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Selling Price ($)" required error={errors.priceUsdDollars?.message}>
+                <input
+                  type="number" step="0.01" min="0"
+                  {...register("priceUsdDollars", { valueAsNumber: true })}
+                  className={inp} placeholder="3.99"
+                  onChange={(e) => {
+                    const usd = parseFloat(e.target.value);
+                    register("priceUsdDollars", { valueAsNumber: true }).onChange(e);
+                    if (!isNaN(usd) && usdRate > 0) {
+                      const inrRs = usd / usdRate / 100;
+                      setValue("priceRs", Math.round(inrRs * 100) / 100);
+                    }
+                  }}
+                />
+                {watchPriceUsdDollars && watchPriceUsdDollars > 0 && (
+                  <p className="text-xs text-gray-400 mt-0.5">≈ ₹{Math.round(watchPriceUsdDollars / usdRate / 100)}</p>
+                )}
+              </Field>
+              <Field label="INR Price (₹ auto-filled)" hint="You can adjust manually">
+                <input type="number" step="0.01" min="0" {...register("priceRs", { valueAsNumber: true })} className={inp} />
+              </Field>
+              <Field label="Compare at price ($)">
+                <input type="number" step="0.01" min="0" {...register("compareAtUsdDollars", { valueAsNumber: true })} className={inp} placeholder="4.99" />
+              </Field>
+            </>
+          )}
         </div>
         {discPct !== null && (
           <p className="text-sm text-green-700 font-medium">{discPct}% off</p>

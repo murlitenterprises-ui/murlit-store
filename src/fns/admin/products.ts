@@ -109,6 +109,8 @@ const productSchema = z.object({
   priceIncludesGst: z.boolean().default(true),
   seoTitle: z.string().optional(),
   seoDescription: z.string().optional(),
+  priceUsdCents: z.number().int().positive().optional().nullable(),
+  compareAtUsdCents: z.number().int().positive().optional().nullable(),
   images: z.array(z.object({
     id: z.string().optional(),
     url: z.string(),
@@ -128,6 +130,8 @@ export const createProduct = createServerFn()
       mrp: productData.mrp ?? null,
       badge: productData.badge ?? null,
       categoryId: productData.categoryId ?? null,
+      priceUsdCents: productData.priceUsdCents ?? null,
+      compareAtUsdCents: productData.compareAtUsdCents ?? null,
     }).returning();
     if (images.length) {
       await db.insert(productImages).values(
@@ -155,6 +159,8 @@ export const updateProduct = createServerFn()
         mrp: productData.mrp ?? null,
         badge: productData.badge ?? null,
         categoryId: productData.categoryId ?? null,
+        priceUsdCents: productData.priceUsdCents ?? null,
+        compareAtUsdCents: productData.compareAtUsdCents ?? null,
         updatedAt: new Date(),
       })
       .where(eq(products.id, id))

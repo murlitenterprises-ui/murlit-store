@@ -25,6 +25,7 @@ const couponSchema = z.object({
   firstOrderOnly: z.boolean().default(false),
   description: z.string().optional(),
   isActive: z.boolean().default(true),
+  isPublic: z.boolean().default(false),
 });
 type FormData = z.infer<typeof couponSchema>;
 
@@ -54,7 +55,7 @@ function AdminCoupons() {
 
   const typeVal = watch("type");
 
-  const openCreate = () => { setEditId(null); reset({ type: "percent", isActive: true, firstOrderOnly: false, value: undefined as any }); setShowForm(true); };
+  const openCreate = () => { setEditId(null); reset({ type: "percent", isActive: true, firstOrderOnly: false, isPublic: false, value: undefined as any }); setShowForm(true); };
   const openEdit = (c: any) => {
     setEditId(c.id);
     reset({
@@ -70,6 +71,7 @@ function AdminCoupons() {
       firstOrderOnly: c.firstOrderOnly,
       description: c.description ?? "",
       isActive: c.isActive,
+      isPublic: (c as any).isPublic ?? false,
     });
     setShowForm(true);
   };
@@ -89,6 +91,7 @@ function AdminCoupons() {
         firstOrderOnly: data.firstOrderOnly,
         description: data.description || null,
         isActive: data.isActive,
+        isPublic: data.isPublic,
       };
       if (editId) {
         await updateCoupon({ data: { ...payload, id: editId } });
@@ -187,10 +190,14 @@ function AdminCoupons() {
               <label className="block text-sm font-medium mb-1">Description (shown to customers)</label>
               <input {...register("description")} className={inp} placeholder="Get 10% off on orders above ₹500" />
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" {...register("firstOrderOnly")} className="rounded" />
                 First order only
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" {...register("isPublic")} className="rounded" />
+                Show in Available Offers
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" {...register("isActive")} className="rounded" />

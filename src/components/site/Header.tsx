@@ -7,11 +7,23 @@ import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
 import logoCompact from "@/assets/logo-compact.webp";
 import { searchProducts, getNavCategories } from "@/fns/catalog";
-import { inrFromPaise } from "@/lib/format";
+import { formatPrice, CURRENCIES, type SupportedCurrency } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency-context";
 import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useCart } from "@/lib/cart-context";
 import { Link as RouterLink } from "@tanstack/react-router";
+
+const CURRENCY_OPTIONS: { value: SupportedCurrency; label: string }[] = [
+  { value: "INR", label: "INR ₹" },
+  { value: "USD", label: "USD $" },
+  { value: "EUR", label: "EUR €" },
+  { value: "GBP", label: "GBP £" },
+  { value: "AED", label: "AED" },
+  { value: "CAD", label: "CAD $" },
+  { value: "AUD", label: "AUD $" },
+  { value: "SGD", label: "SGD $" },
+];
 
 const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide Shipping", "Diwali Special Collection Live", "WhatsApp Business Enquiries"];
 
@@ -135,6 +147,7 @@ export function Header() {
   const { data: session } = useSession();
   const sessionUser = session?.user;
   const { count: cartCount } = useCart();
+  const { currency, rates, setCurrency } = useCurrency();
 
   const handleSearchChange = useCallback((q: string) => {
     setSearchQ(q);
@@ -288,7 +301,7 @@ export function Header() {
                     )}
                     <div className="min-w-0">
                       <div className="truncate font-medium">{r.name}</div>
-                      <div className="text-xs text-muted-foreground">{inrFromPaise(r.price)}</div>
+                      <div className="text-xs text-muted-foreground">{formatPrice(r.price, currency, rates)}</div>
                     </div>
                   </Link>
                 ))}
@@ -296,8 +309,15 @@ export function Header() {
             )}
           </div>
           <div className="ml-auto flex items-center gap-1 md:gap-3">
-            <select aria-label="Currency" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
-              <option>INR ₹</option><option>USD $</option><option>GBP £</option><option>EUR €</option><option>AED</option>
+            <select
+              aria-label="Currency"
+              className="hidden bg-transparent text-xs font-semibold outline-none lg:block cursor-pointer"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as SupportedCurrency)}
+            >
+              {CURRENCY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
             <select aria-label="Language" className="hidden bg-transparent text-xs font-semibold outline-none lg:block">
               <option>English</option><option>हिन्दी</option>
@@ -679,8 +699,15 @@ export function Header() {
           <div style={{ borderTop: "1px solid rgba(184,145,63,0.18)", background: "var(--background)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
             {/* Currency / Language selectors */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 18px 2px", fontSize: 11 }}>
-              <select aria-label="Currency" style={{ background: "transparent", border: "none", fontSize: 11, fontWeight: 600, outline: "none", cursor: "pointer" }}>
-                <option>INR ₹</option><option>USD $</option><option>GBP £</option>
+              <select
+                aria-label="Currency"
+                style={{ background: "transparent", border: "none", fontSize: 11, fontWeight: 600, outline: "none", cursor: "pointer" }}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as SupportedCurrency)}
+              >
+                {CURRENCY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
               </select>
               <span style={{ color: "rgba(0,0,0,0.2)" }}>|</span>
               <select aria-label="Language" style={{ background: "transparent", border: "none", fontSize: 11, fontWeight: 600, outline: "none", cursor: "pointer" }}>

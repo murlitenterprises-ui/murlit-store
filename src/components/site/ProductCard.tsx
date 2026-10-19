@@ -2,7 +2,8 @@ import { Heart, Eye, Star, Plus, ShoppingBag } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { inrFromPaise, discountPct } from "@/lib/format";
+import { discountPct } from "@/lib/format";
+import { Price } from "@/components/site/Price";
 import { useCart } from "@/lib/cart-context";
 import { toggleWishlist } from "@/fns/wishlist";
 import { useSession } from "@/lib/auth-client";
@@ -101,8 +102,8 @@ export function ProductCard({ p }: { p: CardProduct }) {
         </div>
         <h3 className="font-display text-[20px] leading-tight">{p.name}</h3>
         <div className="flex items-baseline gap-2">
-          <span className="text-[18px] font-bold">{inrFromPaise(p.price)}</span>
-          {p.mrp && <span className="text-[15px] text-muted-foreground line-through">{inrFromPaise(p.mrp)}</span>}
+          <Price paise={p.price} className="text-[18px] font-bold" />
+          {p.mrp && <Price paise={p.mrp} className="text-[15px] text-muted-foreground line-through" />}
           {off > 0 && <span className="text-[15px] font-semibold text-leaf">{off}% off</span>}
         </div>
       </div>

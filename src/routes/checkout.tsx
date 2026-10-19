@@ -13,20 +13,26 @@ import { getCheckoutSummary, placeOrder, createRazorpayOrder, verifyRazorpayPaym
 import { getAvailableCoupons } from "@/fns/coupons";
 import { getMyReferralInfo } from "@/fns/referral";
 import { inrFromPaise } from "@/lib/format";
+import { formatPrice } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency-context";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { useCart } from "@/lib/cart-context";
-import { Loader2, Plus, CheckCircle2, Tag, CircleDollarSign, ChevronDown, X } from "lucide-react";
+import { Loader2, Plus, CheckCircle2, Tag, CircleDollarSign, ChevronDown, ChevronRight, X, Gift } from "lucide-react";
+import { AvailableOffersDrawer } from "@/components/site/AvailableOffersDrawer";
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 export const Route = createFileRoute("/checkout")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    offersOpen: s["offersOpen"] === "1" ? ("1" as const) : undefined,
+  }),
   beforeLoad: async () => {
     const user = await getCurrentUser();
     if (!user) throw redirect({ to: "/login", search: { redirect: "/checkout" } as any });
   },
   loader: async () => {
-    const [addresses, cart] = await Promise.all([listAddresses(), getCart()]);
-    return { addresses, cart };
+    const [addresses, cart, user] = await Promise.all([listAddresses(), getCart(), getCurrentUser()]);
+    return { addresses, cart, checkoutUser: user };
   },
   component: CheckoutPage,
 });
@@ -51,7 +57,9 @@ declare global {
 }
 
 function CheckoutPage() {
-  const { addresses: initAddresses, cart } = Route.useLoaderData();
+  const { addresses: initAddresses, cart, checkoutUser } = Route.useLoaderData();
+  const search = Route.useSearch();
+  const offersOpen = search["offersOpen"];
   const navigate = useNavigate();
   const { invalidate: invalidateCart } = useCart();
 
@@ -74,9 +82,12 @@ function CheckoutPage() {
   const [coinBalance, setCoinBalance] = useState(0);
   const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
   const [showAvailCoupons, setShowAvailCoupons] = useState(false);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [offersDrawerOpen, setOffersDrawerOpen] = useState(offersOpen === "1");
 
   const addrForm = useForm<AddressForm>({ resolver: zodResolver(addressSchema) });
   const watchState = addrForm.watch("state");
+  const { currency, rates } = useCurrency();
 
   // Update stateCode when state changes
   useEffect(() => {
@@ -95,6 +106,7 @@ function CheckoutPage() {
       data: {
         shippingStateCode: addr.stateCode,
         couponCode: appliedCoupon ?? undefined,
+        offerId: selectedOfferId ?? undefined,
         useCoins,
       },
     })
@@ -106,7 +118,7 @@ function CheckoutPage() {
       })
       .catch(() => setSummary(null))
       .finally(() => setSummaryLoading(false));
-  }, [selectedAddressId, appliedCoupon, useCoins]);
+  }, [selectedAddressId, appliedCoupon, selectedOfferId, useCoins]);
 
   // Load referral info + available coupons when address is selected
   useEffect(() => {
@@ -148,7 +160,7 @@ function CheckoutPage() {
       const updated = await listAddresses();
       setAddresses(updated);
       const newest = updated[updated.length - 1];
-      setSelectedAddressId(newest.id);
+      if (newest) setSelectedAddressId(newest.id);
       setShowNewAddress(false);
       addrForm.reset();
       toast.success("Address saved");
@@ -183,6 +195,7 @@ function CheckoutPage() {
           paymentMethod,
           customerGstin: isGstBusiness ? gstin : undefined,
           couponCode: appliedCoupon ?? undefined,
+          offerId: selectedOfferId ?? undefined,
           useCoins,
         },
       });
@@ -367,6 +380,18 @@ function CheckoutPage() {
               )}
             </section>
 
+            {/* Offers & Coupons row */}
+            <button
+              onClick={() => setOffersDrawerOpen(true)}
+              className="w-full flex items-center justify-between rounded-lg border border-dashed border-green-400 bg-green-50 px-4 py-3 text-sm hover:bg-green-100 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold text-green-700">
+                <Gift className="h-4 w-4" />
+                {summary?.appliedOfferId ? `Offer applied · saving ${inrFromPaise(summary.offerDiscount ?? 0)}` : "View Coupons & Offers"}
+              </span>
+              <ChevronRight className="h-4 w-4 text-green-600" />
+            </button>
+
             {/* Coupon Code */}
             <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
               <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Tag size={15} /> Apply Coupon</h2>
@@ -467,7 +492,7 @@ function CheckoutPage() {
                   <input type="checkbox" checked={useCoins} onChange={(e) => setUseCoins(e.target.checked)} className="w-4 h-4 accent-[var(--maroon)]" />
                 </label>
                 {useCoins && summary?.coinsValue > 0 && (
-                  <p className="text-xs text-green-600 mt-2">Saving {inrFromPaise(summary.coinsValue)} ({summary.coinsUsed} coins · max {summary.maxCoinsPct}% of order)</p>
+                  <p className="text-xs text-green-600 mt-2">Saving {formatPrice(summary.coinsValue, currency, rates)} ({summary.coinsUsed} coins · max {summary.maxCoinsPct}% of order)</p>
                 )}
                 {useCoins && !summary?.coinsValue && (
                   <p className="text-xs text-gray-400 mt-2">Coins applied after coupon/referral discounts</p>
@@ -486,7 +511,7 @@ function CheckoutPage() {
                 {cart.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm">
                     <span className="text-gray-700 truncate flex-1 mr-2">{item.name} × {item.qty}</span>
-                    <span className="font-medium flex-shrink-0">{inrFromPaise(item.price * item.qty)}</span>
+                    <span className="font-medium flex-shrink-0">{formatPrice(item.price * item.qty, currency, rates)}</span>
                   </div>
                 ))}
               </div>
@@ -498,7 +523,7 @@ function CheckoutPage() {
                   <>
                     <div className="flex justify-between text-gray-600">
                       <span>Subtotal</span>
-                      <span>{inrFromPaise(summary.subtotal)}</span>
+                      <span>{formatPrice(summary.subtotal, currency, rates)}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>Taxable amount</span>
@@ -528,28 +553,39 @@ function CheckoutPage() {
                     {summary.shipping === 0 && summary.freeShippingAbove > 0 && (
                       <p className="text-xs text-green-600">🎉 Free shipping on orders above {inrFromPaise(summary.freeShippingAbove)}</p>
                     )}
+                    {summary.offerDiscount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Offer discount</span>
+                        <span>-{formatPrice(summary.offerDiscount, currency, rates)}</span>
+                      </div>
+                    )}
                     {summary.couponDiscount > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Coupon ({summary.couponCode})</span>
-                        <span>-{inrFromPaise(summary.couponDiscount)}</span>
+                        <span>-{formatPrice(summary.couponDiscount, currency, rates)}</span>
                       </div>
                     )}
                     {summary.coinsValue > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Coins ({summary.coinsUsed})</span>
-                        <span>-{inrFromPaise(summary.coinsValue)}</span>
+                        <span>-{formatPrice(summary.coinsValue, currency, rates)}</span>
                       </div>
                     )}
                     {summary.referralDiscount > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Welcome Discount</span>
-                        <span>-{inrFromPaise(summary.referralDiscount)}</span>
+                        <span>-{formatPrice(summary.referralDiscount, currency, rates)}</span>
                       </div>
                     )}
                     <div className="border-t pt-2 flex justify-between font-bold text-base">
                       <span>Total</span>
-                      <span>{inrFromPaise(summary.total)}</span>
+                      <span>{formatPrice(summary.total, currency, rates)}</span>
                     </div>
+                    {currency !== "INR" && (
+                      <p className="text-xs text-amber-700 bg-amber-50 rounded p-2 mt-1">
+                        You will be charged ₹{(summary.total / 100).toLocaleString("en-IN")} (approx {formatPrice(summary.total, currency, rates)}). Payment is in Indian Rupees.
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p className="text-xs text-gray-400">Select an address to see GST breakdown</p>
@@ -573,6 +609,14 @@ function CheckoutPage() {
         </div>
       </main>
       <Footer />
+      <AvailableOffersDrawer
+        open={offersDrawerOpen}
+        onClose={() => setOffersDrawerOpen(false)}
+        subtotal={summary?.subtotal ?? 0}
+        isLoggedIn={!!checkoutUser}
+        selectedOfferId={selectedOfferId}
+        onSelectOffer={setSelectedOfferId}
+      />
     </div>
   );
 }

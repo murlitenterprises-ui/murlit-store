@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CartProvider } from "@/lib/cart-context";
+import { CurrencyProvider } from "@/lib/currency-context";
 import {
   Outlet,
   Link,
@@ -10,6 +11,9 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { getPublicExchangeRates } from "@/fns/currency";
+import { parseCurrencyCookie, countryToCurrency, type SupportedCurrency } from "@/lib/currency";
+import { getWebRequest } from "@tanstack/react-start/server";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "sonner";
@@ -77,6 +81,24 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  loader: async () => {
+    const rates = await getPublicExchangeRates();
+    // Detect currency from cookie or Vercel country header (server-side)
+    let currency: SupportedCurrency = "INR";
+    if (typeof window === "undefined") {
+      try {
+        const req = getWebRequest();
+        const cookieCurrency = parseCurrencyCookie(req?.headers.get("cookie") ?? "");
+        if (cookieCurrency) {
+          currency = cookieCurrency;
+        } else {
+          const country = req?.headers.get("x-vercel-ip-country") ?? "IN";
+          currency = countryToCurrency(country);
+        }
+      } catch { /* local dev — default to INR */ }
+    }
+    return { rates, currency };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -191,6 +213,7 @@ if ('serviceWorker' in navigator) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const { rates, currency } = Route.useLoaderData();
 
   // Capture ?ref=CODE from URL and store in a 30-day cookie for referral attribution
   useEffect(() => {
@@ -206,12 +229,14 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <CartProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <Toaster position="bottom-right" />
-        <RevealObserver />
-      </CartProvider>
+      <CurrencyProvider initialCurrency={currency} initialRates={rates}>
+        <CartProvider>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <Toaster position="bottom-right" />
+          <RevealObserver />
+        </CartProvider>
+      </CurrencyProvider>
     </QueryClientProvider>
   );
 }
