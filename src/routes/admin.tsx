@@ -5,7 +5,7 @@ import { signOut } from "@/lib/auth-client";
 import { useState } from "react";
 import {
   LayoutDashboard, Package, FolderOpen, ShoppingCart, Users,
-  MessageSquare, Settings, ExternalLink, LogOut, Menu, X, ChevronRight,
+  MessageSquare, Settings, ExternalLink, LogOut, Menu, X, ChevronRight, Tag,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -28,6 +28,7 @@ const navItems = [
   { to: "/admin/orders" as const, label: "Orders", icon: ShoppingCart },
   { to: "/admin/customers" as const, label: "Customers", icon: Users },
   { to: "/admin/enquiries" as const, label: "Enquiries", icon: MessageSquare },
+  { to: "/admin/coupons" as const, label: "Coupons", icon: Tag },
   { to: "/admin/settings" as const, label: "Settings", icon: Settings },
 ];
 

@@ -31,6 +31,13 @@ const settingsSchema = z.object({
   shippingFee: z.number().int().min(0),
   whatsappNumber: z.string().optional(),
   supportEmail: z.string().optional(),
+  // Referral settings
+  referralEnabled: z.boolean().default(true),
+  referralCoinReward: z.number().int().min(0).default(100),
+  referralWelcomeDiscount: z.number().int().min(0).default(5000),
+  coinValuePaise: z.number().int().min(1).default(100),
+  maxCoinsPctPerOrder: z.number().int().min(1).max(100).default(20),
+  coinExpiryDays: z.number().int().min(1).default(365),
 });
 
 export const saveStoreSettings = createServerFn()
@@ -67,6 +74,12 @@ export const saveStoreSettings = createServerFn()
       registeredAddress: data.registeredAddress || null,
       whatsappNumber: data.whatsappNumber || null,
       supportEmail: data.supportEmail || null,
+      referralEnabled: data.referralEnabled,
+      referralCoinReward: data.referralCoinReward,
+      referralWelcomeDiscount: data.referralWelcomeDiscount,
+      coinValuePaise: data.coinValuePaise,
+      maxCoinsPctPerOrder: data.maxCoinsPctPerOrder,
+      coinExpiryDays: data.coinExpiryDays,
       updatedAt: new Date(),
     };
 
