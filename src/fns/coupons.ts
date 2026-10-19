@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/server/db";
 import { coupons, couponUsages } from "@/server/db/schema";
 import { eq, and, count, gte, lte, or, isNull } from "drizzle-orm";
-import { requireUser } from "@/server/auth-helpers";
+import { requireUser, getSessionUser } from "@/server/auth-helpers";
 import { validateCoupon } from "@/server/coupon-helpers";
 
 export type { CouponResult } from "@/server/coupon-helpers";
@@ -67,4 +67,53 @@ export const getAvailableCoupons = createServerFn()
       });
     }
     return eligible;
+  });
+
+// ─── Public coupons (is_public=true) for the Available Offers drawer ─────────
+
+export const getPublicCoupons = createServerFn()
+  .validator(z.object({ subtotal: z.number().int().min(0) }))
+  .handler(async ({ data }) => {
+    const user = await getSessionUser();
+    const now = new Date();
+    const rows = await db
+      .select()
+      .from(coupons)
+      .where(
+        and(
+          eq(coupons.isActive, true),
+          eq(coupons.isPublic, true),
+          or(isNull(coupons.startsAt), lte(coupons.startsAt, now)),
+          or(isNull(coupons.endsAt), gte(coupons.endsAt, now)),
+        )
+      );
+
+    return rows.map((c) => {
+      const meetsMin = !c.minOrder || data.subtotal >= c.minOrder;
+      let discount = 0;
+      if (meetsMin && data.subtotal > 0) {
+        if (c.type === "percent") {
+          discount = Math.round((data.subtotal * c.value) / 100);
+          if (c.maxDiscount) discount = Math.min(discount, c.maxDiscount);
+        } else {
+          discount = c.value;
+        }
+        discount = Math.min(discount, data.subtotal);
+      }
+      return {
+        id: c.id,
+        code: c.code,
+        type: c.type as "percent" | "flat",
+        value: c.value,
+        maxDiscount: c.maxDiscount,
+        minOrder: c.minOrder,
+        description: c.description,
+        firstOrderOnly: c.firstOrderOnly,
+        endsAt: c.endsAt,
+        discount,
+        eligible: meetsMin,
+        reason: meetsMin ? null : `Min order ${c.minOrder ? `₹${c.minOrder / 100}` : ""}`,
+        requiresLogin: !user,
+      };
+    });
   });

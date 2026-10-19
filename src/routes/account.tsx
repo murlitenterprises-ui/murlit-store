@@ -18,9 +18,11 @@ import {
 import { listMyOrders, cancelMyOrder } from "@/fns/orders";
 import { getInvoice } from "@/fns/invoice";
 import { getMyReferralInfo, getMyCoinLedger } from "@/fns/referral";
+import { getMyOffers } from "@/fns/offers";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { toast } from "sonner";
 import { inrFromPaise } from "@/lib/format";
+import { Price } from "@/components/site/Price";
 import { Download, Copy, Share2 } from "lucide-react";
 
 export const Route = createFileRoute("/account")({
@@ -32,7 +34,7 @@ export const Route = createFileRoute("/account")({
   component: AccountPage,
 });
 
-type Tab = "profile" | "addresses" | "orders" | "wishlist" | "referral" | "security";
+type Tab = "profile" | "addresses" | "orders" | "wishlist" | "referral" | "offers" | "security";
 
 // ─── Profile form ─────────────────────────────────────────────────────────────
 const profileSchema = z.object({
@@ -180,6 +182,13 @@ function AccountPage() {
     getMyCoinLedger({ data: { page: 1 } }).then(setCoinLedgerData).catch(() => {});
   }, [activeTab]);
 
+  const [myOffers, setMyOffers] = useState<Awaited<ReturnType<typeof getMyOffers>> | null>(null);
+  useEffect(() => {
+    if (activeTab !== "offers") return;
+    if (myOffers) return;
+    getMyOffers().then(setMyOffers).catch(() => {});
+  }, [activeTab]);
+
   const handleCancelOrder = async (orderNumber: string) => {
     if (!confirm("Cancel this order?")) return;
     setCancellingOrderId(orderNumber);
@@ -288,6 +297,7 @@ function AccountPage() {
     { id: "orders", label: "My Orders" },
     { id: "wishlist", label: "Wishlist" },
     { id: "referral", label: "Refer & Earn" },
+    { id: "offers", label: "My Offers" },
     { id: "security", label: "Security" },
   ];
 
@@ -578,7 +588,7 @@ function AccountPage() {
                             <p className="text-sm text-muted-foreground mt-1">
                               {new Date(o.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                               {" · "}{o.itemCount} item{o.itemCount !== 1 ? "s" : ""}
-                              {" · "}<span className="font-semibold text-foreground">{inrFromPaise(o.total)}</span>
+                              {" · "}<Price paise={o.total} className="font-semibold text-foreground" />
                             </p>
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -699,6 +709,38 @@ function AccountPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── My Offers ── */}
+            {activeTab === "offers" && (
+              <div className="rounded-sm border bg-background p-6">
+                <h2 className="font-display text-xl text-maroon mb-1">My Offers</h2>
+                <p className="text-sm text-muted-foreground mb-6">Offers you can use at checkout. Only one offer applies per order.</p>
+                {!myOffers && <p className="text-sm text-muted-foreground">Loading…</p>}
+                {myOffers && myOffers.length === 0 && <p className="text-sm text-muted-foreground">No offers available right now.</p>}
+                <div className="space-y-3">
+                  {myOffers?.map((o) => (
+                    <div key={o.id} className={`rounded-lg border p-4 ${o.eligible ? "border-green-300 bg-green-50" : "border-gray-200 bg-gray-50 opacity-75"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{o.title}</span>
+                            {o.tagText && <span className="rounded-full bg-maroon/10 text-maroon text-[10px] font-bold px-2 py-0.5">{o.tagText}</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {o.percent}% off{o.maxDiscountPaise ? ` (max ${inrFromPaise(o.maxDiscountPaise)})` : ""}
+                            {o.minOrderPaise > 0 ? ` · min ${inrFromPaise(o.minOrderPaise)}` : ""}
+                          </p>
+                          {o.description && <p className="text-xs text-gray-400 mt-0.5">{o.description}</p>}
+                        </div>
+                        <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${o.eligible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          {o.eligible ? "Eligible" : (o.reason ?? "Not eligible")}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

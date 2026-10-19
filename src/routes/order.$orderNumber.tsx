@@ -7,6 +7,7 @@ import { getMyOrder, cancelMyOrder } from "@/fns/orders";
 import { getInvoice } from "@/fns/invoice";
 import { getCurrentUser } from "@/fns/auth";
 import { inrFromPaise } from "@/lib/format";
+import { Price } from "@/components/site/Price";
 import { toast } from "sonner";
 
 const WA_LINK = "https://wa.me/919999999999";
@@ -118,7 +119,7 @@ function OrderPage() {
                       <p className="text-xs text-gray-400">SKU: {item.sku} · Qty: {item.qty}</p>
                     </div>
                     <div className="text-right flex-shrink-0 ml-4">
-                      <p className="font-semibold">{inrFromPaise(item.price * item.qty)}</p>
+                      <Price paise={item.price * item.qty} className="font-semibold" />
                       {item.gstRate > 0 && (
                         <p className="text-xs text-gray-400">GST: {inrFromPaise(item.taxAmount ?? 0)}</p>
                       )}
@@ -129,7 +130,7 @@ function OrderPage() {
               {/* Totals */}
               <div className="border-t mt-2 pt-3 space-y-1 text-sm">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span><span>{inrFromPaise(order.subtotal)}</span>
+                  <span>Subtotal</span><Price paise={order.subtotal} />
                 </div>
                 {order.taxType === "CGST_SGST" ? (
                   <>
@@ -145,12 +146,29 @@ function OrderPage() {
                     <span>IGST</span><span>{inrFromPaise(order.igst)}</span>
                   </div>
                 )}
+                {(order as any).offerDiscountPaise > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Offer discount</span><Price paise={(order as any).offerDiscountPaise} className="text-green-600" />
+                  </div>
+                )}
+                {order.couponDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Coupon {order.couponCode ? `(${order.couponCode})` : ""}</span>
+                    <Price paise={order.couponDiscount} className="text-green-600" />
+                  </div>
+                )}
+                {order.coinsValue > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Coins ({order.coinsUsed})</span>
+                    <Price paise={order.coinsValue} className="text-green-600" />
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
                   <span>{order.shipping === 0 ? <span className="text-green-600">Free</span> : inrFromPaise(order.shipping)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-base border-t pt-2 mt-2">
-                  <span>Total</span><span>{inrFromPaise(order.total)}</span>
+                  <span>Total</span><Price paise={order.total} className="font-bold" />
                 </div>
               </div>
             </div>

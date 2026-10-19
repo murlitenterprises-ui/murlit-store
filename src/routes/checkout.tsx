@@ -616,6 +616,12 @@ function CheckoutPage() {
         isLoggedIn={!!checkoutUser}
         selectedOfferId={selectedOfferId}
         onSelectOffer={setSelectedOfferId}
+        selectedCouponCode={appliedCoupon}
+        onSelectCoupon={(code) => {
+          setAppliedCoupon(code);
+          setCouponInput(code ?? "");
+          setCouponError(null);
+        }}
       />
     </div>
   );

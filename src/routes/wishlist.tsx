@@ -5,6 +5,7 @@ import { Footer } from "@/components/site/Footer";
 import { getWishlist, removeFromWishlist } from "@/fns/wishlist";
 import { getCurrentUser } from "@/fns/auth";
 import { inrFromPaise } from "@/lib/format";
+import { Price } from "@/components/site/Price";
 import { clImg } from "@/lib/cloudinary";
 import { useCart } from "@/lib/cart-context";
 import { useRouter } from "@tanstack/react-router";
@@ -76,8 +77,8 @@ function WishlistPage() {
                     <h3 className="font-semibold text-sm leading-tight hover:text-maroon line-clamp-2">{item.name}</h3>
                   </Link>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="font-bold text-sm">{inrFromPaise(item.price)}</span>
-                    {item.mrp && <span className="text-xs text-gray-400 line-through">{inrFromPaise(item.mrp)}</span>}
+                    <Price paise={item.price} className="font-bold text-sm" />
+                    {item.mrp && <Price paise={item.mrp} className="text-xs text-gray-400 line-through" />}
                   </div>
                   {item.stock < 1 && (
                     <p className="text-xs text-red-500 mt-1">Out of stock</p>

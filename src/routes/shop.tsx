@@ -5,7 +5,6 @@ import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { listProducts, getNavCategories } from "@/fns/catalog";
-import { inrFromPaise } from "@/lib/format";
 import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
 
 const PRICES = [

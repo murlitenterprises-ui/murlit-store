@@ -11,6 +11,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { toast } from "sonner";
 import { getPublicExchangeRates } from "@/fns/currency";
 import { parseCurrencyCookie, countryToCurrency, type SupportedCurrency } from "@/lib/currency";
 import { getWebRequest } from "@tanstack/react-start/server";
@@ -214,6 +215,32 @@ if ('serviceWorker' in navigator) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { rates, currency } = Route.useLoaderData();
+
+  // One-time welcome banner for new customers (no orders yet)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (localStorage.getItem("murlit_welcome_shown")) return;
+    } catch { return; }
+    // Lazy check: if user is logged in and has 0 orders, show the toast
+    import("@/fns/auth").then(({ getCurrentUser }) => getCurrentUser()).then(async (user) => {
+      if (!user) return;
+      try {
+        const shown = localStorage.getItem("murlit_welcome_shown");
+        if (shown) return;
+      } catch { return; }
+      // Check order count
+      const { listMyOrders } = await import("@/fns/orders");
+      const result = await listMyOrders().catch(() => null);
+      if (result && result.length === 0) {
+        toast.success("Welcome to Murlit! Get 10% off on your first order — apply it at checkout.", {
+          duration: 8000,
+          id: "welcome-offer",
+        });
+      }
+      try { localStorage.setItem("murlit_welcome_shown", "1"); } catch {}
+    }).catch(() => {});
+  }, []);
 
   // Capture ?ref=CODE from URL and store in a 30-day cookie for referral attribution
   useEffect(() => {

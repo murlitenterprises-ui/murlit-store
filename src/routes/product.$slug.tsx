@@ -7,6 +7,7 @@ import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { getProductBySlug } from "@/fns/catalog";
 import { inrFromPaise, discountPct } from "@/lib/format";
+import { Price } from "@/components/site/Price";
 import { useCart } from "@/lib/cart-context";
 import { toggleWishlist } from "@/fns/wishlist";
 import { useSession } from "@/lib/auth-client";
@@ -155,9 +156,9 @@ function ProductPage() {
 
               {/* Price */}
               <div className="mt-4 flex items-baseline gap-3">
-                <span className="text-3xl font-bold">{inrFromPaise(product.price)}</span>
+                <Price paise={product.price} usdCents={product.priceUsdCents} className="text-3xl font-bold" />
                 {product.mrp && (
-                  <span className="text-xl text-muted-foreground line-through">{inrFromPaise(product.mrp)}</span>
+                  <Price paise={product.mrp} className="text-xl text-muted-foreground line-through" />
                 )}
                 {off > 0 && (
                   <span className="rounded-sm bg-leaf/10 px-2 py-1 text-sm font-bold text-leaf">{off}% off</span>

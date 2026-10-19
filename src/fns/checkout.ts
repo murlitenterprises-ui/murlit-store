@@ -255,13 +255,14 @@ export const getCheckoutSummary = createServerFn()
         coinsValue -= overBy;
         coinsUsed = Math.floor(coinsValue / coinValuePaise);
       } else {
+        const overAfterCoins = overBy - coinsValue;
         coinsValue = 0; coinsUsed = 0;
-        const remaining = overBy - coinsValue;
-        if (couponDiscount >= remaining) {
-          couponDiscount -= remaining;
+        if (couponDiscount >= overAfterCoins) {
+          couponDiscount -= overAfterCoins;
         } else {
+          const overAfterCoupon = overAfterCoins - couponDiscount;
           couponDiscount = 0;
-          offerDiscount -= (remaining - couponDiscount);
+          offerDiscount = Math.max(0, offerDiscount - overAfterCoupon);
         }
       }
       totalDiscount = offerDiscount + couponDiscount + coinsValue + referralDiscount;
@@ -470,13 +471,14 @@ export const placeOrder = createServerFn()
         const coinValuePaise = settings?.coinValuePaise ?? 100;
         coinsUsed = Math.floor(coinsValue / coinValuePaise);
       } else {
+        const overAfterCoins = overBy - coinsValue;
         coinsValue = 0; coinsUsed = 0;
-        const remaining = overBy - coinsValue;
-        if (couponDiscount >= remaining) {
-          couponDiscount -= remaining;
+        if (couponDiscount >= overAfterCoins) {
+          couponDiscount -= overAfterCoins;
         } else {
+          const overAfterCoupon = overAfterCoins - couponDiscount;
           couponDiscount = 0;
-          offerDiscountPl -= (remaining - couponDiscount);
+          offerDiscountPl = Math.max(0, offerDiscountPl - overAfterCoupon);
         }
       }
       totalDiscount = offerDiscountPl + couponDiscount + coinsValue + referralDiscount;

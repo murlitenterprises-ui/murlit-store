@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { X, Tag, ChevronRight, LogIn, Check } from "lucide-react";
+import { X, Tag, ChevronRight, LogIn, Check, Ticket } from "lucide-react";
 import { getAvailableOffers } from "@/fns/offers";
+import { getPublicCoupons } from "@/fns/coupons";
 import { inrFromPaise } from "@/lib/format";
 
 type Offer = Awaited<ReturnType<typeof getAvailableOffers>>[number];
+type PublicCoupon = Awaited<ReturnType<typeof getPublicCoupons>>[number];
 
 interface Props {
   open: boolean;
@@ -12,67 +14,72 @@ interface Props {
   isLoggedIn: boolean;
   selectedOfferId: string | null;
   onSelectOffer: (offerId: string | null) => void;
+  selectedCouponCode: string | null;
+  onSelectCoupon: (code: string | null) => void;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  welcome: "Offers",
-  loyalty: "Offers",
-  cart_value: "Offers",
-  sitewide: "Offers",
-  bank: "Bank Offers",
-};
+type FilterChip = "All" | "Offers" | "Coupons" | "Bank Offers";
 
-type FilterChip = "All" | "Offers" | "Bank Offers";
-
-export function AvailableOffersDrawer({ open, onClose, subtotal, isLoggedIn, selectedOfferId, onSelectOffer }: Props) {
+export function AvailableOffersDrawer({
+  open, onClose, subtotal, isLoggedIn,
+  selectedOfferId, onSelectOffer,
+  selectedCouponCode, onSelectCoupon,
+}: Props) {
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [coupons, setCoupons] = useState<PublicCoupon[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<FilterChip>("All");
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    getAvailableOffers({ data: { subtotal } })
-      .then(setOffers)
+    Promise.all([
+      getAvailableOffers({ data: { subtotal } }),
+      getPublicCoupons({ data: { subtotal } }),
+    ])
+      .then(([o, c]) => { setOffers(o); setCoupons(c); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [open, subtotal]);
 
-  const bestEligible = offers.reduce<Offer | null>((best, o) => {
-    if (!o.eligible) return best;
-    if (!best || o.discount > (best as any).discount) return o;
-    return best;
-  }, null);
+  const selectedOffer = offers.find((o) => o.id === selectedOfferId) ?? null;
+  const selectedCoupon = coupons.find((c) => c.code === selectedCouponCode) ?? null;
 
-  const filtered = offers.filter((o) => {
-    if (filter === "All") return true;
+  const totalSavings =
+    (selectedOffer?.eligible ? (selectedOffer.discount ?? 0) : 0) +
+    (selectedCoupon?.eligible ? (selectedCoupon.discount ?? 0) : 0);
+
+  const filteredOffers = offers.filter((o) => {
+    if (filter === "All" || filter === "Offers") return o.type !== "bank";
     if (filter === "Bank Offers") return o.type === "bank";
-    return o.type !== "bank";
+    return false;
   });
+  const filteredCoupons = (filter === "All" || filter === "Coupons") ? coupons : [];
+  const showBankComingSoon = filter === "Bank Offers";
 
   if (!open) return null;
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 z-40 lg:block" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
-      {/* Drawer: full screen mobile, right drawer desktop */}
       <div className="fixed inset-0 z-50 flex lg:justify-end lg:items-stretch">
         <div className="w-full lg:w-[420px] bg-white flex flex-col h-full shadow-2xl">
 
-          {/* Green strip header */}
+          {/* Header */}
           <div className="bg-green-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div>
               <p className="font-bold text-sm">Coupons &amp; Offers</p>
               {subtotal > 0 && <p className="text-xs text-green-100">Order value: {inrFromPaise(subtotal)}</p>}
             </div>
-            <button onClick={onClose} className="rounded-full p-1 hover:bg-green-700 transition"><X size={18} /></button>
+            <button onClick={onClose} className="rounded-full p-1 hover:bg-green-700 transition">
+              <X size={18} />
+            </button>
           </div>
 
           {/* Filter chips */}
           <div className="flex gap-2 px-4 py-3 border-b flex-shrink-0 overflow-x-auto">
-            {(["All", "Offers", "Bank Offers"] as FilterChip[]).map((chip) => (
+            {(["All", "Offers", "Coupons", "Bank Offers"] as FilterChip[]).map((chip) => (
               <button
                 key={chip}
                 onClick={() => setFilter(chip)}
@@ -95,14 +102,20 @@ export function AvailableOffersDrawer({ open, onClose, subtotal, isLoggedIn, sel
             </div>
           )}
 
-          {/* Offer list */}
+          {/* Content */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {loading && <p className="text-sm text-gray-400 text-center py-8">Loading offers…</p>}
-            {!loading && filtered.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-8">No offers available</p>
+
+            {!loading && showBankComingSoon && (
+              <div className="rounded-lg border border-dashed border-gray-200 p-6 text-center">
+                <Tag className="mx-auto mb-2 text-gray-300" size={28} />
+                <p className="text-sm font-medium text-gray-400">Bank Offers</p>
+                <p className="text-xs text-gray-300 mt-1">Coming soon</p>
+              </div>
             )}
-            {!loading && filtered.map((offer) => {
-              const isBest = bestEligible?.id === offer.id;
+
+            {/* Offers */}
+            {!loading && filteredOffers.map((offer) => {
               const isSelected = selectedOfferId === offer.id;
               return (
                 <div
@@ -119,29 +132,24 @@ export function AvailableOffersDrawer({ open, onClose, subtotal, isLoggedIn, sel
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-gray-900">{offer.title}</span>
-                        {isBest && offer.eligible && (
-                          <span className="rounded-full bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5">Best offer</span>
-                        )}
                         {offer.tagText && (
-                          <span className="rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5">{offer.tagText}</span>
+                          <span className="rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5">
+                            {offer.tagText}
+                          </span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        {offer.percent}% off{offer.maxDiscountPaise ? ` (max ${inrFromPaise(offer.maxDiscountPaise)})` : ""}
+                        {offer.percent}% off
+                        {offer.maxDiscountPaise ? ` (max ${inrFromPaise(offer.maxDiscountPaise)})` : ""}
                         {offer.minOrderPaise > 0 ? ` · min order ${inrFromPaise(offer.minOrderPaise)}` : ""}
                       </p>
                       {offer.description && <p className="text-xs text-gray-400 mt-0.5">{offer.description}</p>}
                     </div>
                     {offer.eligible ? (
                       <button
-                        onClick={() => {
-                          onSelectOffer(isSelected ? null : offer.id);
-                          onClose();
-                        }}
+                        onClick={() => { onSelectOffer(isSelected ? null : offer.id); onClose(); }}
                         className={`flex-shrink-0 flex items-center gap-1 rounded px-3 py-1.5 text-xs font-bold transition ${
-                          isSelected
-                            ? "bg-green-600 text-white"
-                            : "bg-[var(--maroon)] text-white hover:opacity-90"
+                          isSelected ? "bg-green-600 text-white" : "bg-[var(--maroon)] text-white hover:opacity-90"
                         }`}
                       >
                         {isSelected ? <><Check size={12} /> Applied</> : "Apply"}
@@ -151,43 +159,113 @@ export function AvailableOffersDrawer({ open, onClose, subtotal, isLoggedIn, sel
                     )}
                   </div>
                   {!offer.eligible && offer.reason && (
-                    <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
-                      {offer.reason === "Login to unlock" ? (
-                        <><LogIn size={11} /> {offer.reason}</>
-                      ) : (
-                        offer.reason
-                      )}
+                    <p className="text-xs text-gray-400 mt-2">
+                      {offer.reason === "Login to unlock" ? <><LogIn size={11} className="inline mr-1" />{offer.reason}</> : offer.reason}
                     </p>
                   )}
                   {offer.eligible && offer.discount > 0 && (
-                    <p className="text-xs text-green-600 font-semibold mt-1.5">
-                      You save {inrFromPaise(offer.discount)}
-                    </p>
+                    <p className="text-xs text-green-600 font-semibold mt-1.5">You save {inrFromPaise(offer.discount)}</p>
                   )}
                 </div>
               );
             })}
-          </div>
 
-          {/* Sticky bottom bar */}
-          <div className="border-t bg-white px-4 py-3 flex-shrink-0">
-            {selectedOfferId ? (
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-green-700">
-                  <span className="font-semibold">Offer applied</span>
-                  {bestEligible && selectedOfferId === bestEligible.id && (
-                    <span className="text-gray-400 ml-1">· saving {inrFromPaise(bestEligible.discount)}</span>
+            {/* Coupon cards */}
+            {!loading && filteredCoupons.map((coupon) => {
+              const isSelected = selectedCouponCode === coupon.code;
+              return (
+                <div
+                  key={coupon.id}
+                  className={`rounded-lg border p-4 transition ${
+                    isSelected
+                      ? "border-green-500 bg-green-50"
+                      : coupon.eligible
+                      ? "border-gray-200 bg-white hover:border-gray-300"
+                      : "border-gray-100 bg-gray-50 opacity-75"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Ticket size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-mono font-bold text-sm text-gray-900 tracking-wide">{coupon.code}</span>
+                        {coupon.firstOrderOnly && (
+                          <span className="rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5">
+                            1st order
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {coupon.type === "percent"
+                          ? `${coupon.value}% off${coupon.maxDiscount ? ` (max ${inrFromPaise(coupon.maxDiscount)})` : ""}`
+                          : `Flat ${inrFromPaise(coupon.value)} off`}
+                        {coupon.minOrder ? ` · min order ${inrFromPaise(coupon.minOrder)}` : ""}
+                      </p>
+                      {coupon.description && <p className="text-xs text-gray-400 mt-0.5">{coupon.description}</p>}
+                      {coupon.endsAt && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Expires {new Date(coupon.endsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        </p>
+                      )}
+                    </div>
+                    {coupon.eligible ? (
+                      <button
+                        onClick={() => {
+                          if (coupon.requiresLogin) return;
+                          onSelectCoupon(isSelected ? null : coupon.code);
+                          onClose();
+                        }}
+                        disabled={coupon.requiresLogin}
+                        className={`flex-shrink-0 flex items-center gap-1 rounded px-3 py-1.5 text-xs font-bold transition ${
+                          coupon.requiresLogin
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : isSelected
+                            ? "bg-green-600 text-white"
+                            : "bg-[var(--maroon)] text-white hover:opacity-90"
+                        }`}
+                      >
+                        {coupon.requiresLogin ? (
+                          <><LogIn size={12} /> Login</>
+                        ) : isSelected ? (
+                          <><Check size={12} /> Applied</>
+                        ) : "Apply"}
+                      </button>
+                    ) : (
+                      <ChevronRight size={16} className="flex-shrink-0 text-gray-300 mt-0.5" />
+                    )}
+                  </div>
+                  {!coupon.eligible && coupon.reason && (
+                    <p className="text-xs text-gray-400 mt-2">{coupon.reason}</p>
+                  )}
+                  {coupon.eligible && coupon.discount > 0 && !coupon.requiresLogin && (
+                    <p className="text-xs text-green-600 font-semibold mt-1.5">You save {inrFromPaise(coupon.discount)}</p>
                   )}
                 </div>
+              );
+            })}
+
+            {!loading && !showBankComingSoon && filteredOffers.length === 0 && filteredCoupons.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-8">No offers available</p>
+            )}
+          </div>
+
+          {/* Sticky bottom — Total Savings */}
+          <div className="border-t bg-white px-4 py-3 flex-shrink-0">
+            {totalSavings > 0 ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500">Total savings</p>
+                  <p className="text-sm font-bold text-green-600">{inrFromPaise(totalSavings)}</p>
+                </div>
                 <button
-                  onClick={() => onSelectOffer(null)}
+                  onClick={() => { onSelectOffer(null); onSelectCoupon(null); }}
                   className="text-xs text-red-500 hover:underline font-medium"
                 >
-                  Remove
+                  Remove all
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-gray-400 text-center">Select an offer to apply savings</p>
+              <p className="text-xs text-gray-400 text-center">Select an offer or coupon to save</p>
             )}
           </div>
         </div>
