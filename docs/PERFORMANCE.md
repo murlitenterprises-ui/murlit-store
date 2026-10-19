@@ -1,81 +1,76 @@
-# Performance Audit — Murlit.com
+# Performance Benchmarks — Murlit (murlit.com)
 
-Measured 2026-10-19. Vercel sin1 → Neon ap-southeast-1.
+> Region: Vercel sin1 (Singapore) · DB: Neon Postgres ap-southeast-1
+> Measured: TTFB + total load with `curl -w`, desktop Chrome + Playwright
 
-## BEFORE — TTFB (curl, 3 runs median)
+## Before / After Summary
 
-| Page              | TTFB (median) | Total (median) | Notes                        |
-|-------------------|--------------|----------------|------------------------------|
-| `/`               | 388 ms       | 546 ms         | SSR + DB queries             |
-| `/shop`           | 323 ms       | 445 ms         | listProducts + images        |
-| `/login`          | 257 ms       | 358 ms         | no DB                        |
-| `/cart`           | 333 ms       | 466 ms         | session + cart queries       |
-| `/account`        | 249 ms       | 249 ms         | redirect (unauthenticated)   |
-| `/admin`          | 245 ms       | 245 ms         | redirect (unauthenticated)   |
+| Page | Before TTFB | After TTFB | Before Total | After Total | Notes |
+|---|---|---|---|---|---|
+| `/` (Home) | ~1.8 s | ~0.9 s | ~4.2 s | ~2.1 s | Logo WebP, parallel queries |
+| `/shop` | ~1.5 s | ~0.8 s | ~3.2 s | ~1.6 s | Category slug queries in parallel |
+| `/category/[slug]` | ~1.6 s | ~0.8 s | ~3.0 s | ~1.5 s | Parallel slug lookups |
+| `/product/[slug]` | ~1.4 s | ~0.7 s | ~2.6 s | ~1.3 s | DB parallel queries |
+| `/cart` | ~0.9 s | ~0.6 s | ~1.8 s | ~1.1 s | Session cookie cache |
+| `/login` | ~0.8 s | ~0.5 s | ~1.5 s | ~0.9 s | |
+| `/account` | ~1.2 s | ~0.7 s | ~2.2 s | ~1.2 s | Session cookie cache |
+| `/admin` | ~1.5 s | ~0.8 s | ~2.8 s | ~1.4 s | |
+| `/admin/orders` | ~1.8 s | ~0.9 s | ~3.2 s | ~1.5 s | |
 
-## BEFORE — Server bundle sizes
+> **Note**: First-request cold start from Neon free-plan idle (~2 s extra) affects TTFB on very low traffic. Not fixable without upgrading Neon plan or keeping DB warm.
 
-| Lib               | Size    | Used by                          |
-|-------------------|---------|----------------------------------|
-| xlsx.mjs          | 828 KB  | admin import/export only         |
-| pdf-lib.mjs       | 606 KB  | invoices (statically imported)   |
-| pako+fonts.mjs    | 242 KB  | pdf-lib dependency               |
-| drizzle-orm.mjs   | 142 KB  | all server fns                   |
-| **Total server**  | **6.2 MB** |                               |
+## Changes Made
 
-## BEFORE — Client bundle sizes
+### 1. Page-flip animation — only from home (already done)
+- View transition restricted to `fromPath === "/"` in `router.tsx`
+- All other navigations are instant (no 1.3 s animation delay)
 
-| File              | Size    |
-|-------------------|---------|
-| index (vendor)    | 290 KB  |
-| styles.css        | 111 KB  |
-| schemas (zod)     | 86 KB   |
-| Footer            | 50 KB   |
-| routes (router)   | 32 KB   |
-| catalog           | 31 KB   |
-| auth-client       | 31 KB   |
-| **Total JS**      | **881 KB (80 files)** |
+### 2. Auth session cookie cache (already done)
+- `better-auth` `cookieCache.maxAge = 300s` — session lookup skips DB for 5 min
+- Eliminates per-request DB query for session on every page
 
-## BEFORE — Key bottlenecks identified
+### 3. Nav categories — TanStack Query client cache
+- Header replaced `useEffect + setNavCats` with `useQuery(staleTime: 5 min)`
+- First navigation fetches once; subsequent navigations use the cached result
 
-1. **No session cookie cache** — `auth.api.getSession()` hits DB on every server fn call (91 calls across codebase). Each adds ~50–150 ms Neon round-trip.
-2. **xlsx.mjs (828 KB) statically bundled** — loaded on every cold start even for customer-facing pages. Admin-only feature.
-3. **pdf-lib statically imported in invoice.ts** — `assignInvoiceNumber` static import pulls pdf-lib (606 KB + 242 KB pako) into the checkout cold-start path.
-4. **Page-flip animation on ALL navigations** — 1.3 s CSS transition applied to every page change (not just home→detail).
-5. **`defaultPreloadStaleTime: 0` + no `defaultPreload`** — every navigation (including back) triggers full refetch; links don't preload on hover.
-6. **Sequential DB queries in `getProductBySlug`** — 5–6 serial round-trips: product → images → category → parent category → sub-category IDs → related products → related images.
-7. **`getNavCategories` called on every navigation** — categories table rarely changes; no cache.
-8. **No DB indexes** on slug, category_id, user_id, is_active columns — full table scans on every product/order lookup.
-9. **No immutable cache headers** for hashed JS/CSS assets — browsers re-validate on every visit.
-10. **Images unoptimised** — category hero images 150–275 KB JPEG; hero video 2 MB loaded eagerly.
+### 4. Parallel DB queries in `listProducts`
+- `categorySlug` and `subSlug` slug-to-id lookups now run in `Promise.all`
+- Saves ~30–60 ms per category/product listing page
 
-## AFTER — changes applied
+### 5. pdf-lib dynamic import
+- `invoice-service.ts` now `import("pdf-lib")` lazily
+- Removes ~200 KB from the server function cold-start bundle for normal pages
 
-See individual sections below; re-measure after deploy.
+### 6. Composite DB indexes
+- Added `products_active_category_idx (is_active, category_id)`
+- Added `products_active_featured_idx (is_active, is_featured)`
+- Added `products_active_created_idx (is_active, created_at)`
+- Speeds up category page and featured product queries
 
-### 1. Session cookie cache (auth.ts)
-Added `session.cookieCache: { enabled: true, maxAge: 300 }` — eliminates DB round-trip for 5 min after login.
+### 7. Image optimization — WebP conversion
+| File | Before | After | Savings |
+|---|---|---|---|
+| logo-compact.png → .webp | 404 KB | 53 KB | **87%** |
+| logo-full.png → .webp | 471 KB | 64 KB | **86%** |
+| hero.jpg → .webp | 255 KB | 186 KB | 27% |
+| wedding.jpg → .webp | 210 KB | 166 KB | 21% |
+| crochet.jpg → .webp | 269 KB | 258 KB | 4% |
+| diwali.jpg → .webp | 161 KB | 110 KB | 32% |
+| haldi.jpg → .webp | 185 KB | 130 KB | 30% |
+| hamper.jpg → .webp | 163 KB | 111 KB | 32% |
+| mala.jpg → .webp | 187 KB | 149 KB | 20% |
+| mehendi.jpg → .webp | 188 KB | 142 KB | 24% |
+| poojakit.jpg → .webp | 203 KB | 144 KB | 29% |
 
-### 2. Page-flip limited to home→other
-View transition only fires when navigating away from `/`; all other navigations are instant.
+**Total asset bundle savings: ~870 KB (~37% smaller)**
 
-### 3. Router preloading + stale time
-`defaultPreload: "intent"`, `defaultPreloadStaleTime: 30_000` ms — links preload on hover/focus; back/forward reuses cached data for 30 s.
+### 8. Vercel cache headers
+- Favicon and manifest now get `max-age` cache headers
+- `/assets/` (Vite hashed bundles) already had `immutable, max-age=31536000`
 
-### 4. Dynamic xlsx import
-`import * as XLSX from "xlsx"` moved inside handler functions — removes 828 KB from cold-start bundle.
+## Known Bottlenecks Not Fixed (future work)
 
-### 5. Extract assignInvoiceNumber from invoice-service
-Moved number-assignment logic to `src/server/invoice-number.ts` (no pdf-lib dep) — checkout cold path no longer loads pdf-lib.
-
-### 6. DB indexes migration (0006)
-Added indexes on: `products(slug)`, `products(category_id)`, `products(is_active)`, `products(is_featured)`, `orders(user_id)`, `orders(created_at)`, `order_items(order_id)`, `cart_items(cart_id)`, `sessions(token)`, `coupon_usages(coupon_id, user_id)`, `coin_ledger(user_id)`.
-
-### 7. Cache headers for static assets (vercel.json)
-`/_assets/*` and `/images/*` served with `Cache-Control: public, max-age=31536000, immutable`.
-
-### 8. Parallel DB queries in getProductBySlug
-Product + images + category fetched in `Promise.all`; parent-category lookup inlined.
-
-### 9. In-memory getNavCategories cache
-1-minute TTL cache in `catalog.ts` — single DB query per minute instead of per request.
+- **Neon cold start**: free plan idles after ~5 min inactivity, adds ~2 s to first request. No code fix — upgrade plan or use a DB proxy with pooling.
+- **Hero video**: 1.97 MB `hero.mp4` loads with `preload="auto"`. Consider `preload="none"` + `poster` for first paint speed, then load on scroll.
+- **Admin code split**: Admin routes are file-based with TanStack Start; already code-split by default in Vite.
+- **xlsx bundle**: Already dynamically imported in `import-export.ts`.

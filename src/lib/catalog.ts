@@ -1,12 +1,12 @@
-import hero from "@/assets/hero.jpg";
-import wedding from "@/assets/wedding.jpg";
-import mala from "@/assets/mala.jpg";
-import crochet from "@/assets/crochet.jpg";
-import hamper from "@/assets/hamper.jpg";
-import diwali from "@/assets/diwali.jpg";
-import haldi from "@/assets/haldi.jpg";
-import poojakit from "@/assets/poojakit.jpg";
-import mehendi from "@/assets/mehendi.jpg";
+import hero from "@/assets/hero.webp";
+import wedding from "@/assets/wedding.webp";
+import mala from "@/assets/mala.webp";
+import crochet from "@/assets/crochet.webp";
+import hamper from "@/assets/hamper.webp";
+import diwali from "@/assets/diwali.webp";
+import haldi from "@/assets/haldi.webp";
+import poojakit from "@/assets/poojakit.webp";
+import mehendi from "@/assets/mehendi.webp";
 
 export const img = { hero, wedding, mala, crochet, hamper, diwali, haldi, poojakit, mehendi };
 

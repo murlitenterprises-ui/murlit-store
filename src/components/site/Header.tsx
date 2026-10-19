@@ -2,9 +2,10 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle, LogOut, Settings } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useQuery } from "@tanstack/react-query";
 import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
-import logoCompact from "@/assets/logo-compact.png";
+import logoCompact from "@/assets/logo-compact.webp";
 import { searchProducts, getNavCategories } from "@/fns/catalog";
 import { inrFromPaise } from "@/lib/format";
 import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
@@ -38,7 +39,6 @@ export function Header() {
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<ProductRow[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [navCats, setNavCats] = useState<CategoryTree[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -124,6 +124,14 @@ export function Header() {
       setOpen((prev) => (prev === mega ? null : mega));
     }
   }, []);
+  const { data: navCatsData } = useQuery({
+    queryKey: ["navCategories"],
+    queryFn: () => getNavCategories(),
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+  });
+  const navCats: CategoryTree[] = navCatsData ?? [];
+
   const { data: session } = useSession();
   const sessionUser = session?.user;
   const { count: cartCount } = useCart();
@@ -151,11 +159,6 @@ export function Header() {
 
   // SSR safety: portal only available after mount
   useEffect(() => { setMounted(true); }, []);
-
-  // Load nav categories from DB on mount
-  useEffect(() => {
-    getNavCategories().then((cats) => { if (cats?.length) setNavCats(cats); }).catch(() => {});
-  }, []);
 
   // Close user menu on outside click
   useEffect(() => {
