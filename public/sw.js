@@ -1,8 +1,8 @@
 // Murlit Service Worker — caches Vite-hashed assets only.
 // NEVER caches HTML navigations, /api, /admin, /account, /checkout, /cart, or auth requests.
-// Cache name bumped to v2 — old caches (v1) are deleted on activate.
+// Cache name bumped to v3 — old caches (v1/v2) are deleted on activate.
 
-const CACHE_NAME = "murlit-static-v2";
+const CACHE_NAME = "murlit-static-v3";
 
 // On install: claim immediately, no pre-caching of non-hashed files
 self.addEventListener("install", (event) => {

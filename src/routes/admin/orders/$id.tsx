@@ -188,6 +188,15 @@ function AdminOrderDetail() {
                 <div className="flex justify-between text-gray-600"><span>IGST</span><span>{inrFromPaise(order.igst)}</span></div>
               )}
               <div className="flex justify-between text-gray-600"><span>Shipping</span><span>{order.shipping === 0 ? "Free" : inrFromPaise(order.shipping)}</span></div>
+              {(order as any).offerDiscountPaise > 0 && (
+                <div className="flex justify-between text-green-700"><span>Offer Discount</span><span>-{inrFromPaise((order as any).offerDiscountPaise)}</span></div>
+              )}
+              {order.couponDiscount > 0 && (
+                <div className="flex justify-between text-green-700"><span>Coupon {order.couponCode ? `(${order.couponCode})` : ""}</span><span>-{inrFromPaise(order.couponDiscount)}</span></div>
+              )}
+              {order.coinsValue > 0 && (
+                <div className="flex justify-between text-green-700"><span>Coins ({order.coinsUsed})</span><span>-{inrFromPaise(order.coinsValue)}</span></div>
+              )}
               <div className="flex justify-between font-bold text-base border-t pt-2"><span>Total</span><span>{inrFromPaise(order.total)}</span></div>
             </div>
           </div>

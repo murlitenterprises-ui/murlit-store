@@ -419,18 +419,21 @@ export const placeOrder = createServerFn()
     const maxTotalDiscount2 = Math.floor((subtotal * maxTotalDiscountPct2) / 100);
     let offerDiscountPl = 0;
     let appliedOfferIdPl: string | null = null;
+    let appliedOfferTitle: string | null = null;
     if (data.offerId) {
       const { checkOfferEligibility } = await import("@/server/offer-helpers");
       const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
       if (res.eligible) {
         offerDiscountPl = res.discount;
         appliedOfferIdPl = res.offerId;
+        appliedOfferTitle = res.title;
       }
     } else {
       const best = await getBestOffer(user.id, subtotal);
       if (best) {
         offerDiscountPl = best.discount;
         appliedOfferIdPl = best.offerId;
+        appliedOfferTitle = best.title;
       }
     }
 
@@ -609,6 +612,12 @@ export const placeOrder = createServerFn()
         shippingAddress: data.shippingAddress as Record<string, string>,
         items: lineItems.map((li) => ({ name: li.name, qty: li.qty, price: li.price })),
         invoicePdfBase64,
+        offerDiscount: offerDiscountPl > 0 ? offerDiscountPl : undefined,
+        offerTitle: appliedOfferTitle,
+        couponDiscount: couponDiscount > 0 ? couponDiscount : undefined,
+        couponCode: validatedCouponCode,
+        coinsValue: coinsValue > 0 ? coinsValue : undefined,
+        coinsUsed: coinsUsed > 0 ? coinsUsed : undefined,
       }).catch(() => {});
       sendAdminNewOrderEmail({
         orderNumber: order.orderNumber,
@@ -774,6 +783,12 @@ export const verifyRazorpayPayment = createServerFn()
       const pdfBytes = await generateInvoicePdf(order.id);
       invoicePdfBase64Rzp = Buffer.from(pdfBytes).toString("base64");
     } catch {}
+    // Look up offer title for email
+    let rzpOfferTitle: string | null = null;
+    if ((order as any).appliedOfferId) {
+      const [offerRow] = await db.select({ title: offers.title }).from(offers).where(eq(offers.id, (order as any).appliedOfferId)).limit(1);
+      rzpOfferTitle = offerRow?.title ?? null;
+    }
     sendOrderConfirmationEmail({
       orderNumber: order.orderNumber,
       email: user.email,
@@ -783,6 +798,12 @@ export const verifyRazorpayPayment = createServerFn()
       shippingAddress: order.shippingAddress as Record<string, string>,
       items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
       invoicePdfBase64: invoicePdfBase64Rzp,
+      offerDiscount: (order as any).offerDiscountPaise > 0 ? (order as any).offerDiscountPaise : undefined,
+      offerTitle: rzpOfferTitle,
+      couponDiscount: order.couponDiscount > 0 ? order.couponDiscount : undefined,
+      couponCode: order.couponCode,
+      coinsValue: order.coinsValue > 0 ? order.coinsValue : undefined,
+      coinsUsed: order.coinsUsed > 0 ? order.coinsUsed : undefined,
     }).catch(() => {});
     sendAdminNewOrderEmail({
       orderNumber: order.orderNumber,

@@ -12,9 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
-import { getPublicExchangeRates } from "@/fns/currency";
-import { parseCurrencyCookie, countryToCurrency, type SupportedCurrency } from "@/lib/currency";
-import { getWebRequest } from "@tanstack/react-start/server";
+import { getPublicExchangeRates, getInitialCurrency } from "@/fns/currency";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "sonner";
@@ -83,21 +81,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   loader: async () => {
-    const rates = await getPublicExchangeRates();
-    // Detect currency from cookie or Vercel country header (server-side)
-    let currency: SupportedCurrency = "INR";
-    if (typeof window === "undefined") {
-      try {
-        const req = getWebRequest();
-        const cookieCurrency = parseCurrencyCookie(req?.headers.get("cookie") ?? "");
-        if (cookieCurrency) {
-          currency = cookieCurrency;
-        } else {
-          const country = req?.headers.get("x-vercel-ip-country") ?? "IN";
-          currency = countryToCurrency(country);
-        }
-      } catch { /* local dev — default to INR */ }
-    }
+    const [rates, currency] = await Promise.all([
+      getPublicExchangeRates(),
+      getInitialCurrency(),
+    ]);
     return { rates, currency };
   },
   head: () => ({

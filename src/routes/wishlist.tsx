@@ -4,7 +4,6 @@ import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { getWishlist, removeFromWishlist } from "@/fns/wishlist";
 import { getCurrentUser } from "@/fns/auth";
-import { inrFromPaise } from "@/lib/format";
 import { Price } from "@/components/site/Price";
 import { clImg } from "@/lib/cloudinary";
 import { useCart } from "@/lib/cart-context";

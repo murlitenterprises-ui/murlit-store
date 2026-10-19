@@ -14,7 +14,7 @@ async function getXLSX(): Promise<XLSXModule> {
 // ─── Column definitions ───────────────────────────────────────────────────────
 
 const TEMPLATE_COLUMNS = [
-  "sku", "name", "category_slug", "price_rs", "mrp_rs", "stock",
+  "sku", "name", "category_slug", "price_rs", "mrp_rs", "price_usd", "compare_at_price_usd", "stock",
   "short_description", "description", "hsn_code", "gst_rate",
   "price_includes_gst", "is_active", "is_featured",
   "tags", "image_urls", "seo_title", "seo_description",
@@ -27,6 +27,8 @@ const HELP_ROWS = [
   ["category_slug", "Yes", "Category identifier from the Categories sheet."],
   ["price_rs", "Yes", "Selling price in rupees (e.g. 299). Stored in paise internally."],
   ["mrp_rs", "No", "Maximum retail price in rupees. Must be >= price_rs if provided."],
+  ["price_usd", "No", "USD selling price in dollars (e.g. 7.99). Leave blank to auto-convert from INR."],
+  ["compare_at_price_usd", "No", "USD compare-at (MRP) price in dollars. Leave blank to auto-convert from mrp_rs."],
   ["stock", "No", "Number of units available (whole number, default 0)."],
   ["short_description", "No", "One-line product description shown in listings."],
   ["description", "No", "Full product description (plain text or simple HTML)."],
@@ -56,10 +58,10 @@ export const downloadTemplate = createServerFn().handler(async () => {
 
   // Products sheet with header + 2 example rows
   const exampleRows = [
-    ["TEST-001", "Handcrafted Pooja Thali", allCats[0]?.slug ?? "pooja-rituals", 599, 799, 10,
+    ["TEST-001", "Handcrafted Pooja Thali", allCats[0]?.slug ?? "pooja-rituals", 599, 799, 7.19, 9.59, 10,
      "Beautiful brass thali", "Full description here", "4419", 5, "yes", "yes", "no",
      "pooja,brass,handcrafted", "", "Handcrafted Pooja Thali | Murlit", "Premium pooja thali"],
-    ["TEST-002", "Wedding Gift Hamper", allCats[1]?.slug ?? "wedding", 1299, "", 5,
+    ["TEST-002", "Wedding Gift Hamper", allCats[1]?.slug ?? "wedding", 1299, "", "", "", 5,
      "Curated wedding hamper", "", "", 12, "yes", "yes", "yes",
      "wedding,gift", "", "", ""],
   ];
@@ -114,6 +116,8 @@ export interface PreviewRow {
   categorySlug: string;
   priceRs: number | null;
   mrpRs: number | null;
+  priceUsd: number | null;
+  compareAtPriceUsd: number | null;
   stock: number;
   shortDescription: string;
   description: string;
@@ -190,6 +194,8 @@ export const previewImport = createServerFn({ method: "POST" })
       const categorySlug = String(raw.category_slug ?? "").trim();
       const priceRs = parseNum(raw.price_rs);
       const mrpRs = parseNum(raw.mrp_rs);
+      const priceUsd = parseNum(raw.price_usd);
+      const compareAtPriceUsd = parseNum(raw.compare_at_price_usd);
       const stockRaw = parseNum(raw.stock);
       const stock = stockRaw !== null ? Math.max(0, Math.round(stockRaw)) : 0;
       const gstRaw = parseNum(raw.gst_rate);
@@ -256,6 +262,8 @@ export const previewImport = createServerFn({ method: "POST" })
         categorySlug,
         priceRs,
         mrpRs,
+        priceUsd,
+        compareAtPriceUsd,
         stock,
         shortDescription: String(raw.short_description ?? "").trim(),
         description: String(raw.description ?? "").trim(),
@@ -338,6 +346,8 @@ export const executeImport = createServerFn({ method: "POST" })
           categorySlug: z.string(),
           priceRs: z.number(),
           mrpRs: z.number().nullable(),
+          priceUsd: z.number().nullable(),
+          compareAtPriceUsd: z.number().nullable(),
           stock: z.number(),
           shortDescription: z.string(),
           description: z.string(),
@@ -381,6 +391,8 @@ export const executeImport = createServerFn({ method: "POST" })
       const categoryId = catBySlug.get(row.categorySlug) ?? null;
       const pricePaise = Math.round(row.priceRs * 100);
       const mrpPaise = row.mrpRs !== null ? Math.round(row.mrpRs * 100) : null;
+      const priceUsdCents = row.priceUsd !== null ? Math.round(row.priceUsd * 100) : null;
+      const compareAtUsdCents = row.compareAtPriceUsd !== null ? Math.round(row.compareAtPriceUsd * 100) : null;
 
       // Process images
       const imageRecords: Array<{ url: string; publicId: string | null; sortOrder: number }> = [];
@@ -408,6 +420,8 @@ export const executeImport = createServerFn({ method: "POST" })
           description: row.description || null,
           price: pricePaise,
           mrp: mrpPaise,
+          ...(priceUsdCents !== null ? { priceUsdCents } : {}),
+          ...(compareAtUsdCents !== null ? { compareAtUsdCents } : {}),
           sku: row.sku,
           stock: row.stock,
           isActive: row.isActive,
@@ -444,6 +458,8 @@ export const executeImport = createServerFn({ method: "POST" })
           description: row.description || null,
           price: pricePaise,
           mrp: mrpPaise,
+          ...(priceUsdCents !== null ? { priceUsdCents } : {}),
+          ...(compareAtUsdCents !== null ? { compareAtUsdCents } : {}),
           sku: row.sku,
           stock: row.stock,
           isActive: row.isActive,
@@ -514,6 +530,8 @@ export const exportProducts = createServerFn().handler(async () => {
         cat?.slug ?? "",
         (p.price / 100).toFixed(2),
         p.mrp !== null ? (p.mrp / 100).toFixed(2) : "",
+        (p as any).priceUsdCents !== null && (p as any).priceUsdCents !== undefined ? ((p as any).priceUsdCents / 100).toFixed(2) : "",
+        (p as any).compareAtUsdCents !== null && (p as any).compareAtUsdCents !== undefined ? ((p as any).compareAtUsdCents / 100).toFixed(2) : "",
         p.stock,
         p.shortDescription ?? "",
         p.description ?? "",

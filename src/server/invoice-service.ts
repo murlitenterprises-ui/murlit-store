@@ -1,5 +1,6 @@
 // Server-only — never import this from client code
 import { db, orders, orderItems, storeSettings } from "@/server/db";
+import { offers } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
 import { inrInWords } from "@/lib/financial-year";
 import type { PDFFont } from "pdf-lib";
@@ -24,13 +25,18 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) throw new Error("Order not found");
 
-  const [[items, settings], { PDFDocument, rgb, StandardFonts }] = await Promise.all([
+  const ord = order as any;
+  const [[items, settings, offerRow], { PDFDocument, rgb, StandardFonts }] = await Promise.all([
     Promise.all([
       db.select().from(orderItems).where(eq(orderItems.orderId, order.id)),
       db.select().from(storeSettings).limit(1).then((r) => r[0]),
+      ord.appliedOfferId
+        ? db.select({ title: offers.title }).from(offers).where(eq(offers.id, ord.appliedOfferId)).limit(1).then((r) => r[0] ?? null)
+        : Promise.resolve(null),
     ]),
     import("pdf-lib"),
   ]);
+  if (offerRow) ord.appliedOfferTitle = offerRow.title;
 
   const addr = order.shippingAddress as Record<string, string>;
   const isSameState = order.taxType === "CGST_SGST";
@@ -180,7 +186,12 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   }
 
   // Discount lines
-  const ord = order as any;
+  if ((ord.offerDiscountPaise ?? 0) > 0) {
+    y -= 14;
+    drawText(page, `Offer Discount${ord.appliedOfferTitle ? ` (${ord.appliedOfferTitle})` : ""}`, colX[0] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawText(page, `-${fmt(ord.offerDiscountPaise)}`, colX[colX.length - 1] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
+    drawLine(page, M, y - 3, width - M, rgb(0.9, 0.9, 0.9));
+  }
   if ((ord.couponDiscount ?? 0) > 0) {
     y -= 14;
     drawText(page, `Discount (${ord.couponCode ?? "Coupon"})`, colX[0] + 2, y, regFont, 7.5, rgb(0.1, 0.5, 0.1));
@@ -210,6 +221,7 @@ export async function generateInvoicePdf(orderId: string): Promise<Uint8Array> {
   const totalPairs: [string, string][] = [
     ["Subtotal:", fmt(order.subtotal)],
     ...(order.shipping > 0 ? [["Shipping:", fmt(order.shipping)] as [string, string]] : []),
+    ...((ord.offerDiscountPaise ?? 0) > 0 ? [[`Offer${ord.appliedOfferTitle ? ` (${ord.appliedOfferTitle})` : ""}:`, `-${fmt(ord.offerDiscountPaise)}`] as [string, string]] : []),
     ...((ord.couponDiscount ?? 0) > 0 ? [[`Discount (${ord.couponCode ?? "Coupon"}):`, `-${fmt(ord.couponDiscount)}`] as [string, string]] : []),
     ...((ord.coinsValue ?? 0) > 0 ? [[`Coins (${ord.coinsUsed ?? 0}):`, `-${fmt(ord.coinsValue)}`] as [string, string]] : []),
     ...((ord.referralDiscount ?? 0) > 0 ? [["Welcome Discount:", `-${fmt(ord.referralDiscount)}`] as [string, string]] : []),

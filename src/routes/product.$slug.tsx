@@ -6,7 +6,7 @@ import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { ProductCard } from "@/components/site/ProductCard";
 import { getProductBySlug } from "@/fns/catalog";
-import { inrFromPaise, discountPct } from "@/lib/format";
+import { discountPct } from "@/lib/format";
 import { Price } from "@/components/site/Price";
 import { useCart } from "@/lib/cart-context";
 import { toggleWishlist } from "@/fns/wishlist";

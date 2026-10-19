@@ -31,11 +31,29 @@ export async function sendOrderConfirmationEmail(order: {
   shippingAddress: Record<string, string>;
   items: { name: string; qty: number; price: number }[];
   invoicePdfBase64?: string;
+  offerDiscount?: number;
+  offerTitle?: string | null;
+  couponDiscount?: number;
+  couponCode?: string | null;
+  coinsValue?: number;
+  coinsUsed?: number;
 }): Promise<void> {
   const addr = order.shippingAddress;
   const itemRows = order.items
     .map((i) => `<tr><td style="padding:6px 0;border-bottom:1px solid #eee">${i.name}</td><td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right">×${i.qty}</td><td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right">${inrFromPaise(i.price * i.qty)}</td></tr>`)
     .join("");
+
+  const discountRows = [
+    order.offerDiscount && order.offerDiscount > 0
+      ? `<tr><td colspan="2" style="padding:4px 0;color:#1a7a2a">Offer${order.offerTitle ? ` (${order.offerTitle})` : ""}</td><td style="padding:4px 0;color:#1a7a2a;text-align:right">-${inrFromPaise(order.offerDiscount)}</td></tr>`
+      : "",
+    order.couponDiscount && order.couponDiscount > 0
+      ? `<tr><td colspan="2" style="padding:4px 0;color:#1a7a2a">Coupon${order.couponCode ? ` (${order.couponCode})` : ""}</td><td style="padding:4px 0;color:#1a7a2a;text-align:right">-${inrFromPaise(order.couponDiscount)}</td></tr>`
+      : "",
+    order.coinsValue && order.coinsValue > 0
+      ? `<tr><td colspan="2" style="padding:4px 0;color:#1a7a2a">Coins (${order.coinsUsed ?? 0})</td><td style="padding:4px 0;color:#1a7a2a;text-align:right">-${inrFromPaise(order.coinsValue)}</td></tr>`
+      : "",
+  ].join("");
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;color:#333;max-width:560px;margin:0 auto;padding:24px">
 <h1 style="color:#7a1e2a;font-size:22px;margin-bottom:4px">Order Confirmed!</h1>
@@ -45,7 +63,7 @@ export async function sendOrderConfirmationEmail(order: {
   <strong>Payment:</strong> ${order.paymentMethod === "cod" ? "Cash on Delivery" : "Online"}
 </div>
 <table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>${itemRows}</tbody>
-<tfoot><tr><td colspan="2" style="padding-top:10px;font-weight:bold">Total</td><td style="padding-top:10px;font-weight:bold;text-align:right">${inrFromPaise(order.total)}</td></tr></tfoot></table>
+<tfoot>${discountRows}<tr><td colspan="2" style="padding-top:10px;font-weight:bold">Total</td><td style="padding-top:10px;font-weight:bold;text-align:right">${inrFromPaise(order.total)}</td></tr></tfoot></table>
 <h3 style="font-size:14px;margin-top:20px;margin-bottom:6px">Shipping To</h3>
 <p style="font-size:13px;color:#555;margin:0">${addr.name}<br>${addr.phone}<br>${addr.line1}${addr.line2 ? `, ${addr.line2}` : ""}<br>${addr.city}, ${addr.state} – ${addr.pincode}</p>
 ${order.paymentMethod === "cod" ? `<p style="margin-top:20px;font-size:13px;color:#888">Please keep Rs. ${(order.total / 100).toFixed(2)} ready at delivery.</p>` : "<p style=\"font-size:13px;color:#888;margin-top:20px\">Payment received. Thank you!</p>"}
