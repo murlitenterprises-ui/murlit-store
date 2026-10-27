@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +17,7 @@ import { formatPrice } from "@/lib/currency";
 import { useCurrency } from "@/lib/currency-context";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { useCart } from "@/lib/cart-context";
-import { Loader2, Plus, CheckCircle2, Tag, CircleDollarSign, ChevronDown, ChevronRight, X, Gift } from "lucide-react";
+import { Loader2, Plus, CheckCircle2, Tag, ChevronDown, ChevronRight, X, Gift, LogIn, User } from "lucide-react";
 import { AvailableOffersDrawer } from "@/components/site/AvailableOffersDrawer";
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
@@ -26,12 +26,9 @@ export const Route = createFileRoute("/checkout")({
   validateSearch: (s: Record<string, unknown>) => ({
     offersOpen: s["offersOpen"] === "1" ? ("1" as const) : undefined,
   }),
-  beforeLoad: async () => {
-    const user = await getCurrentUser();
-    if (!user) throw redirect({ to: "/login", search: { redirect: "/checkout" } as any });
-  },
   loader: async () => {
-    const [addresses, cart, user] = await Promise.all([listAddresses(), getCart(), getCurrentUser()]);
+    const [user, cart] = await Promise.all([getCurrentUser(), getCart()]);
+    const addresses = user ? await listAddresses() : [];
     return { addresses, cart, checkoutUser: user };
   },
   component: CheckoutPage,
@@ -62,6 +59,19 @@ function CheckoutPage() {
   const offersOpen = search["offersOpen"];
   const navigate = useNavigate();
   const { invalidate: invalidateCart } = useCart();
+
+  const isGuest = !checkoutUser;
+
+  // Guest contact info
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
+  const [guestMarketing, setGuestMarketing] = useState(false);
+  const [guestHoneypot, setGuestHoneypot] = useState(""); // must stay empty
+
+  // Guest inline address state (reuses same keys as addressSchema)
+  const [guestState, setGuestState] = useState("");
+  const [guestStateCode, setGuestStateCode] = useState("");
 
   const [addresses, setAddresses] = useState(initAddresses);
   const [selectedAddressId, setSelectedAddressId] = useState(
@@ -97,14 +107,14 @@ function CheckoutPage() {
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
-  // Recompute summary when address, coupon, or coins toggle changes
+  // Recompute summary when address (or guest state), coupon, or coins toggle changes
   useEffect(() => {
-    const addr = selectedAddress;
-    if (!addr) { setSummary(null); return; }
+    const stateCode = isGuest ? guestStateCode : selectedAddress?.stateCode;
+    if (!stateCode) { setSummary(null); return; }
     setSummaryLoading(true);
     getCheckoutSummary({
       data: {
-        shippingStateCode: addr.stateCode,
+        shippingStateCode: stateCode,
         couponCode: appliedCoupon ?? undefined,
         offerId: selectedOfferId ?? undefined,
         useCoins,
@@ -118,11 +128,11 @@ function CheckoutPage() {
       })
       .catch(() => setSummary(null))
       .finally(() => setSummaryLoading(false));
-  }, [selectedAddressId, appliedCoupon, selectedOfferId, useCoins]);
+  }, [selectedAddressId, guestStateCode, appliedCoupon, selectedOfferId, useCoins]);
 
-  // Load referral info + available coupons when address is selected
+  // Load referral info + available coupons when address is selected (logged-in users only)
   useEffect(() => {
-    if (!selectedAddress) return;
+    if (!selectedAddress || isGuest) return;
     getMyReferralInfo().then((info) => {
       setCoinBalance(info.coinBalance);
     }).catch(() => {});
@@ -170,37 +180,73 @@ function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedAddress) { toast.error("Select a delivery address"); return; }
+    // Guest validation
+    if (isGuest) {
+      if (!guestName.trim()) { toast.error("Please enter your name"); return; }
+      if (!guestEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) { toast.error("Please enter a valid email"); return; }
+      if (guestPhone.trim().length < 10) { toast.error("Please enter a valid 10-digit phone number"); return; }
+      if (!guestStateCode) { toast.error("Please select your state"); return; }
+    } else {
+      if (!selectedAddress) { toast.error("Select a delivery address"); return; }
+    }
     if (!summary?.lineItems?.length) { toast.error("Your cart is empty"); return; }
     if (isGstBusiness && !GSTIN_RE.test(gstin)) {
       setGstinError("Invalid GSTIN"); return;
     }
 
+    // Build shipping address from guest form or saved address
+    const shippingAddr = isGuest
+      ? {
+          name: guestName.trim(),
+          phone: guestPhone.trim(),
+          line1: addrForm.getValues("line1"),
+          line2: addrForm.getValues("line2") || undefined,
+          city: addrForm.getValues("city"),
+          state: guestState,
+          stateCode: guestStateCode,
+          pincode: addrForm.getValues("pincode"),
+        }
+      : {
+          name: selectedAddress!.name,
+          phone: selectedAddress!.phone,
+          line1: selectedAddress!.line1,
+          line2: selectedAddress!.line2 ?? undefined,
+          city: selectedAddress!.city,
+          state: selectedAddress!.state,
+          stateCode: selectedAddress!.stateCode,
+          pincode: selectedAddress!.pincode,
+        };
+
+    // Validate guest address fields
+    if (isGuest) {
+      if (!shippingAddr.line1?.trim()) { toast.error("Please enter your street address"); return; }
+      if (!shippingAddr.city?.trim()) { toast.error("Please enter your city"); return; }
+      if (!shippingAddr.pincode || shippingAddr.pincode.length !== 6) { toast.error("Please enter a valid 6-digit pincode"); return; }
+    }
+
     setPlacing(true);
     let successOrderNumber: string | undefined;
     let successOrderId: string | undefined;
+    let successGuestToken: string | undefined;
     try {
       const result = await placeOrder({
         data: {
-          shippingAddress: {
-            name: selectedAddress.name,
-            phone: selectedAddress.phone,
-            line1: selectedAddress.line1,
-            line2: selectedAddress.line2 ?? undefined,
-            city: selectedAddress.city,
-            state: selectedAddress.state,
-            stateCode: selectedAddress.stateCode,
-            pincode: selectedAddress.pincode,
-          },
+          shippingAddress: shippingAddr,
           paymentMethod,
           customerGstin: isGstBusiness ? gstin : undefined,
           couponCode: appliedCoupon ?? undefined,
           offerId: selectedOfferId ?? undefined,
           useCoins,
+          guestName: isGuest ? guestName.trim() : undefined,
+          guestEmail: isGuest ? guestEmail.trim().toLowerCase() : undefined,
+          guestPhone: isGuest ? guestPhone.trim() : undefined,
+          guestMarketing: isGuest ? guestMarketing : undefined,
+          honeypot: isGuest ? guestHoneypot : undefined,
         },
       });
       successOrderNumber = result.orderNumber;
       successOrderId = result.orderId;
+      successGuestToken = (result as any).guestToken;
 
       if (paymentMethod !== "cod") {
         // Razorpay flow
@@ -267,7 +313,11 @@ function CheckoutPage() {
     // Navigate AFTER setPlacing(false) to avoid React re-render racing with router transition
     if (successOrderNumber) {
       invalidateCart();
-      navigate({ to: "/order/$orderNumber", params: { orderNumber: successOrderNumber } });
+      navigate({
+        to: "/order/$orderNumber",
+        params: { orderNumber: successOrderNumber },
+        search: successGuestToken ? { token: successGuestToken } : {} as any,
+      });
     }
   };
 
@@ -296,10 +346,53 @@ function CheckoutPage() {
           {/* Left: Address + Payment */}
           <div className="lg:col-span-2 space-y-6">
 
+            {/* Guest: login prompt + contact info */}
+            {isGuest && (
+              <>
+                <div className="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm">
+                  <span className="text-gray-600">Already have an account?</span>
+                  <Link to="/login" search={{ redirect: "/checkout" } as any} className="flex items-center gap-1.5 font-semibold text-[var(--maroon)] hover:underline">
+                    <LogIn className="h-4 w-4" /> Sign in
+                  </Link>
+                </div>
+                <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+                  <h2 className="font-semibold text-gray-800 flex items-center gap-2"><User className="h-4 w-4" /> Contact Information</h2>
+                  {/* Honeypot — hidden from real users */}
+                  <input
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    style={{ position: "absolute", left: "-9999px", opacity: 0, pointerEvents: "none" }}
+                    value={guestHoneypot}
+                    onChange={(e) => setGuestHoneypot(e.target.value)}
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
+                      <input value={guestName} onChange={(e) => setGuestName(e.target.value)} className={inp} placeholder="Your full name" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Phone *</label>
+                      <input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} className={inp} placeholder="10-digit mobile" inputMode="tel" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+                    <input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} className={inp} placeholder="Your email address" type="email" inputMode="email" />
+                    <p className="text-xs text-gray-400 mt-0.5">Your order confirmation will be sent here. We'll also create a free Murlit account.</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" checked={guestMarketing} onChange={(e) => setGuestMarketing(e.target.checked)} className="rounded" />
+                    Send me updates about new products and offers
+                  </label>
+                </section>
+              </>
+            )}
+
             {/* Delivery Address */}
             <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
               <h2 className="font-semibold text-gray-800">Delivery Address</h2>
-              {addresses.map((addr) => (
+              {!isGuest && addresses.map((addr) => (
                 <label key={addr.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${selectedAddressId === addr.id ? "border-[var(--maroon)] bg-[var(--maroon)]/5" : "border-gray-200 hover:border-gray-300"}`}>
                   <input
                     type="radio"
@@ -317,27 +410,9 @@ function CheckoutPage() {
                   {addr.isDefault && <span className="ml-auto text-[10px] bg-[var(--maroon)] text-white px-2 py-0.5 rounded-full font-bold">DEFAULT</span>}
                 </label>
               ))}
-              <button
-                onClick={() => setShowNewAddress((v) => !v)}
-                className="flex items-center gap-2 text-sm text-[var(--maroon)] font-semibold hover:opacity-80"
-              >
-                <Plus className="h-4 w-4" /> Add new address
-              </button>
-
-              {showNewAddress && (
-                <form onSubmit={addrForm.handleSubmit(handleAddAddress)} className="border border-dashed border-gray-300 rounded-lg p-4 space-y-3 mt-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
-                      <input {...addrForm.register("name")} className={inp} placeholder="Name" />
-                      {addrForm.formState.errors.name && <p className="text-xs text-red-600">{addrForm.formState.errors.name.message}</p>}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Phone *</label>
-                      <input {...addrForm.register("phone")} className={inp} placeholder="10-digit mobile" />
-                      {addrForm.formState.errors.phone && <p className="text-xs text-red-600">{addrForm.formState.errors.phone.message}</p>}
-                    </div>
-                  </div>
+              {/* Guest: always-visible inline address form */}
+              {isGuest && (
+                <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 1 *</label>
                     <input {...addrForm.register("line1")} className={inp} placeholder="House/Flat, Street" />
@@ -359,7 +434,12 @@ function CheckoutPage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">State *</label>
                     <select
-                      {...addrForm.register("state")}
+                      value={guestState}
+                      onChange={(e) => {
+                        setGuestState(e.target.value);
+                        const st = INDIAN_STATES.find((s) => s.name === e.target.value);
+                        setGuestStateCode(st?.code ?? "");
+                      }}
                       className={inp}
                     >
                       <option value="">Select state</option>
@@ -367,30 +447,87 @@ function CheckoutPage() {
                         <option key={s.code} value={s.name}>{s.name}</option>
                       ))}
                     </select>
-                    <input type="hidden" {...addrForm.register("stateCode")} />
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-gray-600">
-                    <input type="checkbox" {...addrForm.register("isDefault")} className="rounded" />
-                    Set as default address
-                  </label>
-                  <button type="submit" className="rounded bg-[var(--maroon)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-                    Save Address
+                </div>
+              )}
+
+              {/* Logged-in: add new address button + form */}
+              {!isGuest && (
+                <>
+                  <button
+                    onClick={() => setShowNewAddress((v) => !v)}
+                    className="flex items-center gap-2 text-sm text-[var(--maroon)] font-semibold hover:opacity-80"
+                  >
+                    <Plus className="h-4 w-4" /> Add new address
                   </button>
-                </form>
+                  {showNewAddress && (
+                    <form onSubmit={addrForm.handleSubmit(handleAddAddress)} className="border border-dashed border-gray-300 rounded-lg p-4 space-y-3 mt-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
+                          <input {...addrForm.register("name")} className={inp} placeholder="Name" />
+                          {addrForm.formState.errors.name && <p className="text-xs text-red-600">{addrForm.formState.errors.name.message}</p>}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Phone *</label>
+                          <input {...addrForm.register("phone")} className={inp} placeholder="10-digit mobile" />
+                          {addrForm.formState.errors.phone && <p className="text-xs text-red-600">{addrForm.formState.errors.phone.message}</p>}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 1 *</label>
+                        <input {...addrForm.register("line1")} className={inp} placeholder="House/Flat, Street" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 2</label>
+                        <input {...addrForm.register("line2")} className={inp} placeholder="Area, Landmark (optional)" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">City *</label>
+                          <input {...addrForm.register("city")} className={inp} placeholder="City" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Pincode *</label>
+                          <input {...addrForm.register("pincode")} className={inp} placeholder="6-digit" maxLength={6} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">State *</label>
+                        <select {...addrForm.register("state")} className={inp}>
+                          <option value="">Select state</option>
+                          {INDIAN_STATES.map((s) => (
+                            <option key={s.code} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
+                        <input type="hidden" {...addrForm.register("stateCode")} />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-gray-600">
+                        <input type="checkbox" {...addrForm.register("isDefault")} className="rounded" />
+                        Set as default address
+                      </label>
+                      <button type="submit" className="rounded bg-[var(--maroon)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+                        Save Address
+                      </button>
+                    </form>
+                  )}
+                </>
               )}
             </section>
 
-            {/* Offers & Coupons row */}
-            <button
-              onClick={() => setOffersDrawerOpen(true)}
-              className="w-full flex items-center justify-between rounded-lg border border-dashed border-green-400 bg-green-50 px-4 py-3 text-sm hover:bg-green-100 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold text-green-700">
-                <Gift className="h-4 w-4" />
-                {summary?.appliedOfferId ? `Offer applied · saving ${inrFromPaise(summary.offerDiscount ?? 0)}` : "View Coupons & Offers"}
-              </span>
-              <ChevronRight className="h-4 w-4 text-green-600" />
-            </button>
+            {/* Offers & Coupons row (logged-in only) */}
+            {!isGuest && (
+              <button
+                onClick={() => setOffersDrawerOpen(true)}
+                className="w-full flex items-center justify-between rounded-lg border border-dashed border-green-400 bg-green-50 px-4 py-3 text-sm hover:bg-green-100 transition"
+              >
+                <span className="flex items-center gap-2 font-semibold text-green-700">
+                  <Gift className="h-4 w-4" />
+                  {summary?.appliedOfferId ? `Offer applied · saving ${inrFromPaise(summary.offerDiscount ?? 0)}` : "View Coupons & Offers"}
+                </span>
+                <ChevronRight className="h-4 w-4 text-green-600" />
+              </button>
+            )}
 
             {/* Coupon Code */}
             <section className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
@@ -594,7 +731,7 @@ function CheckoutPage() {
 
               <button
                 onClick={handlePlaceOrder}
-                disabled={placing || !selectedAddress || !summary || summaryLoading}
+                disabled={placing || (!isGuest && !selectedAddress) || !summary || summaryLoading}
                 className="w-full flex items-center justify-center gap-2 rounded-sm bg-[var(--maroon)] py-3.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-60 transition-opacity"
               >
                 {placing ? (

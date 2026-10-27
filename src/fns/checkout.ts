@@ -1,16 +1,56 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { orders, orderItems, products, storeSettings, carts, cartItems, orderHistory, couponUsages, coupons, coinLedger, users, offers } from "@/server/db/schema";
-import { eq, and, inArray, count } from "drizzle-orm";
-import { requireUser } from "@/server/auth-helpers";
+import { orders, orderItems, products, storeSettings, carts, cartItems, orderHistory, couponUsages, coupons, coinLedger, users, offers, guestOrderTokens, guestRateLimits } from "@/server/db/schema";
+import { eq, and, inArray, count, gt } from "drizzle-orm";
+import { requireUser, getSessionUser } from "@/server/auth-helpers";
 import crypto from "node:crypto";
 import { INDIAN_STATES } from "@/lib/india-states";
 import { assignInvoiceNumber } from "@/server/invoice-number";
-import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from "@/lib/email";
+import { sendOrderConfirmationEmail, sendAdminNewOrderEmail, sendGuestSetPasswordEmail } from "@/lib/email";
 import { validateCoupon } from "@/server/coupon-helpers";
 import { getCoinBalanceForUser } from "@/server/referral-helpers";
 import { getBestOffer } from "@/server/offer-helpers";
+import { auth } from "@/server/auth";
+
+// Common disposable email domains to block
+const DISPOSABLE_DOMAINS = new Set([
+  "mailinator.com","guerrillamail.com","tempmail.com","throwam.com","yopmail.com",
+  "sharklasers.com","guerrillamailblock.com","grr.la","guerrillamail.info",
+  "spam4.me","trashmail.com","trashmail.me","dispostable.com","mailnull.com",
+  "fakeinbox.com","throwam.com","maildrop.cc","getnada.com","spamgourmet.com",
+]);
+
+// Read the sessionKey from the cart cookie (replicates cart.ts logic)
+function getCartSessionKey(): string | null {
+  const req = getRequest();
+  const cookieHeader = req?.headers.get("cookie") ?? "";
+  const m = cookieHeader.match(/(?:^|; )murlit_cart=([^;]+)/);
+  return m?.[1] ?? null;
+}
+
+// Rate limit helper: returns true if the request should be blocked
+async function isRateLimited(key: string, endpoint: string, maxCount: number, windowMs: number): Promise<boolean> {
+  const windowStart = new Date(Date.now() - windowMs);
+  const [existing] = await db
+    .select({ id: guestRateLimits.id, count: guestRateLimits.count })
+    .from(guestRateLimits)
+    .where(and(
+      eq(guestRateLimits.key, key),
+      eq(guestRateLimits.endpoint, endpoint),
+      gt(guestRateLimits.windowStart, windowStart),
+    ))
+    .limit(1);
+
+  if (!existing) {
+    await db.insert(guestRateLimits).values({ key, endpoint }).catch(() => {});
+    return false;
+  }
+  if (existing.count >= maxCount) return true;
+  await db.update(guestRateLimits).set({ count: existing.count + 1 }).where(eq(guestRateLimits.id, existing.id)).catch(() => {});
+  return false;
+}
 
 // Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
 // Accepts: "DL", "Delhi", "07" (GSTIN prefix), "dl" — returns "DL" or the uppercased input as fallback.
@@ -117,11 +157,21 @@ export const getCheckoutSummary = createServerFn()
     useCoins: z.boolean().optional(),
   }))
   .handler(async ({ data }) => {
-    const user = await requireUser();
+    const user = await getSessionUser();
 
-    // Get user's cart
-    const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
-    if (!cart) return null;
+    // Get cart — by userId for logged-in users, by sessionKey cookie for guests
+    let cartId: string;
+    if (user) {
+      const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
+      if (!cart) return null;
+      cartId = cart.id;
+    } else {
+      const sessionKey = getCartSessionKey();
+      if (!sessionKey) return null;
+      const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.sessionKey, sessionKey)).limit(1);
+      if (!cart) return null;
+      cartId = cart.id;
+    }
 
     const items = await db
       .select({
@@ -139,7 +189,7 @@ export const getCheckoutSummary = createServerFn()
       })
       .from(cartItems)
       .innerJoin(products, eq(cartItems.productId, products.id))
-      .where(eq(cartItems.cartId, cart.id));
+      .where(eq(cartItems.cartId, cartId));
 
     if (!items.length) return null;
 
@@ -183,11 +233,11 @@ export const getCheckoutSummary = createServerFn()
 
     const shipping = subtotal >= freeShippingAbove ? 0 : shippingFee;
 
-    // ── Referral welcome discount (auto if user was referred and this is first order) ──
+    // ── Referral welcome discount (logged-in users only) ─────────────────────────
     let referralDiscount = 0;
     const referralEnabled = settings?.referralEnabled ?? true;
     const referralWelcomeDiscount = settings?.referralWelcomeDiscount ?? 5000;
-    if (referralEnabled) {
+    if (user && referralEnabled) {
       const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
       if (userData?.referredBy) {
         const prevOrderRows = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
@@ -197,27 +247,28 @@ export const getCheckoutSummary = createServerFn()
       }
     }
 
-    // ── Offer discount (auto best-offer or selected) ─────────────────────────────
+    // ── Offer discount (logged-in users only) ────────────────────────────────────
     const maxTotalDiscountPct = (settings as any)?.maxTotalDiscountPercent ?? 20;
     const maxTotalDiscount = Math.floor((subtotal * maxTotalDiscountPct) / 100);
     let offerDiscount = 0;
     let appliedOfferId: string | null = null;
     let appliedOfferTitle: string | null = null;
-    if (data.offerId) {
-      const { checkOfferEligibility } = await import("@/server/offer-helpers");
-      const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
-      if (res.eligible) {
-        offerDiscount = res.discount;
-        appliedOfferId = res.offerId;
-        appliedOfferTitle = res.title;
-      }
-    } else {
-      // Auto-apply best offer
-      const best = await getBestOffer(user.id, subtotal);
-      if (best) {
-        offerDiscount = best.discount;
-        appliedOfferId = best.offerId;
-        appliedOfferTitle = best.title;
+    if (user) {
+      if (data.offerId) {
+        const { checkOfferEligibility } = await import("@/server/offer-helpers");
+        const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
+        if (res.eligible) {
+          offerDiscount = res.discount;
+          appliedOfferId = res.offerId;
+          appliedOfferTitle = res.title;
+        }
+      } else {
+        const best = await getBestOffer(user.id, subtotal);
+        if (best) {
+          offerDiscount = best.discount;
+          appliedOfferId = best.offerId;
+          appliedOfferTitle = best.title;
+        }
       }
     }
 
@@ -225,17 +276,17 @@ export const getCheckoutSummary = createServerFn()
     let couponDiscount = 0;
     let couponResult: { valid: boolean; code?: string; discount?: number; error?: string; description?: string | null } = { valid: false };
     if (data.couponCode?.trim()) {
-      const res = await validateCoupon(data.couponCode, subtotal - offerDiscount - referralDiscount, user.id);
+      const res = await validateCoupon(data.couponCode, subtotal - offerDiscount - referralDiscount, user?.id ?? null);
       couponResult = res;
       if (res.valid) couponDiscount = res.discount;
     }
 
-    // ── Coins discount ───────────────────────────────────────────────────────────
+    // ── Coins discount (logged-in users only) ────────────────────────────────────
     let coinsUsed = 0;
     let coinsValue = 0;
     const coinValuePaise = settings?.coinValuePaise ?? 100;
     const maxCoinsPct = settings?.maxCoinsPctPerOrder ?? 20;
-    if (data.useCoins && referralEnabled) {
+    if (user && data.useCoins && referralEnabled) {
       const coinBalance = await getCoinBalanceForUser(user.id);
       const maxCoinsValue = Math.floor((subtotal * maxCoinsPct) / 100);
       const applicableValue = Math.min(coinBalance * coinValuePaise, maxCoinsValue, subtotal - offerDiscount - couponDiscount - referralDiscount);
@@ -307,7 +358,7 @@ export const getCheckoutSummary = createServerFn()
       total: grand,
       storeStateCode,
       codEnabled: settings?.codEnabled ?? true,
-      coinBalance: data.useCoins !== undefined ? await getCoinBalanceForUser(user.id) : null,
+      coinBalance: (user && data.useCoins !== undefined) ? await getCoinBalanceForUser(user.id) : null,
       coinValuePaise,
       maxCoinsPct,
       referralEnabled: settings?.referralEnabled ?? true,
@@ -324,16 +375,58 @@ const placeOrderSchema = z.object({
   couponCode: z.string().optional(),
   offerId: z.string().uuid().optional(),
   useCoins: z.boolean().optional(),
+  // Guest-only fields
+  guestName: z.string().optional(),
+  guestEmail: z.string().email().optional(),
+  guestPhone: z.string().optional(),
+  guestMarketing: z.boolean().optional(),
+  honeypot: z.string().optional(),
 });
 
 export const placeOrder = createServerFn()
   .validator(placeOrderSchema)
   .handler(async ({ data }) => {
-    const user = await requireUser();
+    const user = await getSessionUser();
 
-    // Get cart
-    const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
-    if (!cart) throw new Error("Cart is empty");
+    // ── Guest validation ──────────────────────────────────────────────────────────
+    if (!user) {
+      // Honeypot: must be empty
+      if (data.honeypot && data.honeypot.length > 0) throw new Error("Invalid submission");
+
+      // Guest fields required
+      const guestName = data.guestName?.trim();
+      const guestEmail = data.guestEmail?.trim().toLowerCase();
+      const guestPhone = data.guestPhone?.trim();
+      if (!guestName || !guestEmail || !guestPhone) throw new Error("Please fill in your contact information");
+      if (guestPhone.length < 10) throw new Error("Enter a valid 10-digit phone number");
+      if (/^(\d)\1{9}$/.test(guestPhone)) throw new Error("Enter a valid phone number");
+
+      // Disposable email check
+      const emailDomain = guestEmail.split("@")[1] ?? "";
+      if (DISPOSABLE_DOMAINS.has(emailDomain)) throw new Error("Please use a real email address");
+
+      // Rate limiting
+      const req = getRequest();
+      const ip = req?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req?.headers.get("cf-connecting-ip") ?? "unknown";
+      const ipBlocked = await isRateLimited(ip, "placeOrder", 5, 60 * 60 * 1000); // 5/IP/hour
+      if (ipBlocked) throw new Error("Too many orders from this IP. Please try again later.");
+      const phoneBlocked = await isRateLimited(guestPhone, "placeOrder_phone", 3, 24 * 60 * 60 * 1000); // 3/phone/day
+      if (phoneBlocked) throw new Error("Too many orders from this phone number. Please try again later.");
+    }
+
+    // ── Get cart (by userId or sessionKey) ───────────────────────────────────────
+    let cartId: string;
+    if (user) {
+      const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, user.id)).limit(1);
+      if (!cart) throw new Error("Cart is empty");
+      cartId = cart.id;
+    } else {
+      const sessionKey = getCartSessionKey();
+      if (!sessionKey) throw new Error("Cart is empty");
+      const [cart] = await db.select({ id: carts.id }).from(carts).where(eq(carts.sessionKey, sessionKey)).limit(1);
+      if (!cart) throw new Error("Cart is empty");
+      cartId = cart.id;
+    }
 
     const items = await db
       .select({
@@ -342,7 +435,7 @@ export const placeOrder = createServerFn()
         qty: cartItems.qty,
       })
       .from(cartItems)
-      .where(eq(cartItems.cartId, cart.id));
+      .where(eq(cartItems.cartId, cartId));
     if (!items.length) throw new Error("Cart is empty");
 
     // Re-validate products from DB
@@ -403,9 +496,9 @@ export const placeOrder = createServerFn()
 
     const shipping = subtotal >= freeShippingAbove ? 0 : shippingFee;
 
-    // ── Referral discount (first-order only, auto-applied) ──────────────────────
+    // ── Referral discount (logged-in users only) ─────────────────────────────────
     let referralDiscount = 0;
-    if (settings?.referralEnabled !== false) {
+    if (user && settings?.referralEnabled !== false) {
       const [userData] = await db.select({ referredBy: users.referredBy }).from(users).where(eq(users.id, user.id)).limit(1);
       if (userData?.referredBy) {
         const prevOrderRows2 = await db.select({ n: count() }).from(orders).where(eq(orders.userId, user.id));
@@ -415,26 +508,37 @@ export const placeOrder = createServerFn()
       }
     }
 
-    // ── Offer validation (server re-validates) ───────────────────────────────────
+    // ── COD limit for guests ─────────────────────────────────────────────────────
+    if (!user && data.paymentMethod === "cod") {
+      const maxGuestCod = (settings as any)?.codMaxGuestOrderPaise ?? 1000000;
+      const grandEstimate = subtotal;
+      if (grandEstimate > maxGuestCod) {
+        throw new Error(`Guest COD orders are limited to ₹${(maxGuestCod / 100).toLocaleString("en-IN")}. Please pay online or create an account.`);
+      }
+    }
+
+    // ── Offer validation (logged-in users only) ───────────────────────────────────
     const maxTotalDiscountPct2 = (settings as any)?.maxTotalDiscountPercent ?? 20;
     const maxTotalDiscount2 = Math.floor((subtotal * maxTotalDiscountPct2) / 100);
     let offerDiscountPl = 0;
     let appliedOfferIdPl: string | null = null;
     let appliedOfferTitle: string | null = null;
-    if (data.offerId) {
-      const { checkOfferEligibility } = await import("@/server/offer-helpers");
-      const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
-      if (res.eligible) {
-        offerDiscountPl = res.discount;
-        appliedOfferIdPl = res.offerId;
-        appliedOfferTitle = res.title;
-      }
-    } else {
-      const best = await getBestOffer(user.id, subtotal);
-      if (best) {
-        offerDiscountPl = best.discount;
-        appliedOfferIdPl = best.offerId;
-        appliedOfferTitle = best.title;
+    if (user) {
+      if (data.offerId) {
+        const { checkOfferEligibility } = await import("@/server/offer-helpers");
+        const res = await checkOfferEligibility(data.offerId, user.id, subtotal);
+        if (res.eligible) {
+          offerDiscountPl = res.discount;
+          appliedOfferIdPl = res.offerId;
+          appliedOfferTitle = res.title;
+        }
+      } else {
+        const best = await getBestOffer(user.id, subtotal);
+        if (best) {
+          offerDiscountPl = best.discount;
+          appliedOfferIdPl = best.offerId;
+          appliedOfferTitle = best.title;
+        }
       }
     }
 
@@ -443,7 +547,7 @@ export const placeOrder = createServerFn()
     let validatedCouponCode: string | null = null;
     let couponId: string | null = null;
     if (data.couponCode?.trim()) {
-      const res = await validateCoupon(data.couponCode, subtotal - offerDiscountPl - referralDiscount, user.id);
+      const res = await validateCoupon(data.couponCode, subtotal - offerDiscountPl - referralDiscount, user?.id ?? null);
       if (!res.valid) throw new Error(res.error);
       couponDiscount = res.discount;
       validatedCouponCode = res.code;
@@ -451,10 +555,10 @@ export const placeOrder = createServerFn()
       couponId = c?.id ?? null;
     }
 
-    // ── Coins validation (server re-validates balance) ───────────────────────────
+    // ── Coins validation (logged-in users only) ───────────────────────────────────
     let coinsUsed = 0;
     let coinsValue = 0;
-    if (data.useCoins && settings?.referralEnabled !== false) {
+    if (user && data.useCoins && settings?.referralEnabled !== false) {
       const coinValuePaise = settings?.coinValuePaise ?? 100;
       const maxCoinsPct = settings?.maxCoinsPctPerOrder ?? 20;
       const coinBalance = await getCoinBalanceForUser(user.id);
@@ -504,6 +608,52 @@ export const placeOrder = createServerFn()
     const igst = isSameState ? 0 : adjustedTax;
     const total = discountedSubtotal + shipping;
 
+    // ── Guest: find or create account ────────────────────────────────────────────
+    let resolvedUserId: string = user?.id ?? "";
+    let orderEmail: string = user?.email ?? "";
+    let guestAccountCreated = false;
+    let existingEmailGuest = false; // guest whose email already has an account
+
+    if (!user) {
+      const guestEmail = data.guestEmail!.trim().toLowerCase();
+      const guestName = data.guestName!.trim();
+      orderEmail = guestEmail;
+
+      const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, guestEmail)).limit(1);
+
+      if (existingUser) {
+        resolvedUserId = existingUser.id;
+        existingEmailGuest = true;
+      } else {
+        // Create account via Better Auth
+        const BAUTH_URL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+        const randomPw = crypto.randomBytes(32).toString("base64url");
+        try {
+          const signupRes = await auth.handler(new Request(`${BAUTH_URL}/api/auth/sign-up/email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: guestName, email: guestEmail, password: randomPw }),
+          }));
+          const signupData = await signupRes.json().catch(() => ({})) as any;
+          if (signupData?.user?.id) {
+            resolvedUserId = signupData.user.id;
+            guestAccountCreated = true;
+          }
+        } catch {}
+
+        // If signup failed (e.g. race condition), try to find the user
+        if (!resolvedUserId) {
+          const [retryUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, guestEmail)).limit(1);
+          if (retryUser) {
+            resolvedUserId = retryUser.id;
+            existingEmailGuest = true;
+          } else {
+            throw new Error("Failed to create account. Please try again.");
+          }
+        }
+      }
+    }
+
     // Generate order number from a random UUID segment — guaranteed unique, no race condition.
     // Format: PREFIX-YYYYMM-XXXXXXXX (e.g. MUR-202610-A1B2C3D4)
     const now2 = new Date();
@@ -516,8 +666,8 @@ export const placeOrder = createServerFn()
       .insert(orders)
       .values({
         orderNumber,
-        userId: user.id,
-        email: user.email,
+        userId: resolvedUserId || null,
+        email: orderEmail,
         phone: data.shippingAddress.phone,
         status: data.paymentMethod === "cod" ? "confirmed" : "pending",
         paymentMethod: data.paymentMethod,
@@ -541,6 +691,8 @@ export const placeOrder = createServerFn()
         placeOfSupplyState: data.shippingAddress.state,
         customerGstin: data.customerGstin ?? null,
         shippingAddress: data.shippingAddress,
+        isGuestCheckout: !user,
+        guestAccountCreated,
       })
       .returning();
 
@@ -569,25 +721,22 @@ export const placeOrder = createServerFn()
           .set({ stock: newStock, updatedAt: new Date() })
           .where(eq(products.id, p.id));
       }
-      // Record confirmed in history
       await db.insert(orderHistory).values({
         orderId: order.id,
         status: "confirmed",
-        note: "Order placed (COD)",
-        createdBy: user.id,
+        note: user ? "Order placed (COD)" : "Order placed (COD, guest checkout)",
+        createdBy: resolvedUserId || "guest",
       });
-      await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+      await db.delete(cartItems).where(eq(cartItems.cartId, cartId));
 
-      // Record coupon usage + increment usedCount
-      if (couponId && validatedCouponCode) {
-        await db.insert(couponUsages).values({ couponId, userId: user.id, orderId: order.id });
+      if (couponId && validatedCouponCode && resolvedUserId) {
+        await db.insert(couponUsages).values({ couponId, userId: resolvedUserId, orderId: order.id });
         await db.update(coupons).set({ usedCount: (await db.select({ v: coupons.usedCount }).from(coupons).where(eq(coupons.id, couponId)).limit(1))[0].v + 1, updatedAt: new Date() }).where(eq(coupons.id, couponId));
       }
 
-      // Deduct coins from wallet
-      if (coinsUsed > 0) {
+      if (coinsUsed > 0 && resolvedUserId) {
         await db.insert(coinLedger).values({
-          userId: user.id,
+          userId: resolvedUserId,
           type: "spend",
           amount: -coinsUsed,
           reason: `Used on order ${orderNumber}`,
@@ -596,17 +745,16 @@ export const placeOrder = createServerFn()
       }
 
       const invNum = await assignInvoiceNumber(order.id);
-      // Generate PDF for attachment
       let invoicePdfBase64: string | undefined;
       try {
         const { generateInvoicePdf } = await import("@/server/invoice-service");
         const pdfBytes = await generateInvoicePdf(order.id);
         invoicePdfBase64 = Buffer.from(pdfBytes).toString("base64");
       } catch {}
-      // Send confirmation email (non-blocking)
+
       sendOrderConfirmationEmail({
         orderNumber: order.orderNumber,
-        email: user.email,
+        email: orderEmail,
         total: order.total,
         paymentMethod: "cod",
         invoiceNumber: invNum,
@@ -622,14 +770,32 @@ export const placeOrder = createServerFn()
       }).catch(() => {});
       sendAdminNewOrderEmail({
         orderNumber: order.orderNumber,
-        email: user.email,
+        email: orderEmail,
         total: order.total,
         paymentMethod: "cod",
         shippingAddress: data.shippingAddress as Record<string, string>,
       }).catch(() => {});
+
+      // For new-account guests: trigger Better Auth forget-password to send "set your password" email
+      if (!user && guestAccountCreated && resolvedUserId) {
+        const BAUTH_URL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+        auth.handler(new Request(`${BAUTH_URL}/api/auth/forget-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: orderEmail, redirectTo: "/account" }),
+        })).catch(() => {});
+      }
     }
 
-    return { orderNumber: order.orderNumber, orderId: order.id };
+    // Create guest order token for existing-email guests (so they can view the order)
+    let guestToken: string | undefined;
+    if (!user && existingEmailGuest) {
+      guestToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.insert(guestOrderTokens).values({ orderId: order.id, token: guestToken, expiresAt });
+    }
+
+    return { orderNumber: order.orderNumber, orderId: order.id, guestToken };
   });
 
 // ─── Get order (owner only) ───────────────────────────────────────────────────
@@ -659,7 +825,7 @@ const RZP_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 export const createRazorpayOrder = createServerFn()
   .validator(z.object({ orderId: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const user = await requireUser();
+    const user = await requireUser(); // Razorpay requires a logged-in user
     if (!RZP_KEY_ID || !RZP_KEY_SECRET) throw new Error("Razorpay not configured");
 
     const [order] = await db
@@ -815,4 +981,30 @@ export const verifyRazorpayPayment = createServerFn()
     }).catch(() => {});
 
     return { success: true };
+  });
+
+// ─── Guest order access via signed token ─────────────────────────────────────
+
+export const getOrderByGuestToken = createServerFn()
+  .validator(z.object({ orderNumber: z.string(), token: z.string() }))
+  .handler(async ({ data }) => {
+    const [tokenRow] = await db
+      .select({ orderId: guestOrderTokens.orderId, expiresAt: guestOrderTokens.expiresAt })
+      .from(guestOrderTokens)
+      .where(eq(guestOrderTokens.token, data.token))
+      .limit(1);
+
+    if (!tokenRow) throw new Error("Invalid or expired link");
+    if (tokenRow.expiresAt < new Date()) throw new Error("This link has expired. Please log in to view your order.");
+
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, tokenRow.orderId), eq(orders.orderNumber, data.orderNumber)))
+      .limit(1);
+    if (!order) throw new Error("Order not found");
+
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+    const history = await db.select().from(orderHistory).where(eq(orderHistory.orderId, order.id));
+    return { ...order, items, history };
   });

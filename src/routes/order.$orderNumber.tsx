@@ -4,6 +4,7 @@ import { CheckCircle2, Package, Truck, Clock, ArrowRight, MessageCircle, Downloa
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { getMyOrder, cancelMyOrder } from "@/fns/orders";
+import { getOrderByGuestToken } from "@/fns/checkout";
 import { getInvoice } from "@/fns/invoice";
 import { getCurrentUser } from "@/fns/auth";
 import { inrFromPaise } from "@/lib/format";
@@ -13,11 +14,19 @@ import { toast } from "sonner";
 const WA_LINK = "https://wa.me/919999999999";
 
 export const Route = createFileRoute("/order/$orderNumber")({
-  beforeLoad: async () => {
+  validateSearch: (s: Record<string, unknown>) => ({
+    token: typeof s["token"] === "string" ? s["token"] : undefined,
+  }),
+  beforeLoad: async ({ search }) => {
     const user = await getCurrentUser();
-    if (!user) throw redirect({ to: "/login" });
+    if (!user && !search.token) throw redirect({ to: "/login" });
   },
-  loader: async ({ params }) => getMyOrder({ data: { orderNumber: params.orderNumber } }),
+  loader: async ({ params, search }) => {
+    if (search.token) {
+      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: search.token } });
+    }
+    return getMyOrder({ data: { orderNumber: params.orderNumber } });
+  },
   component: OrderPage,
 });
 
@@ -43,12 +52,14 @@ function statusColor(status: string) {
 
 function OrderPage() {
   const initial = Route.useLoaderData();
+  const search = Route.useSearch();
+  const isGuestView = !!search.token; // viewing via guest token (not logged in)
   const [order, setOrder] = useState(initial);
   const addr = order.shippingAddress as any;
   const isPaid = order.paymentStatus === "paid" || order.paymentMethod === "cod";
 
-  const canCancel = order.paymentMethod === "cod" && order.status === "confirmed";
-  const canInvoice = ["confirmed", "packed", "shipped", "delivered"].includes(order.status);
+  const canCancel = !isGuestView && order.paymentMethod === "cod" && order.status === "confirmed";
+  const canInvoice = !isGuestView && ["confirmed", "packed", "shipped", "delivered"].includes(order.status);
   const [cancelling, setCancelling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);

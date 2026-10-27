@@ -14,6 +14,10 @@ export async function requireUser() {
   return user;
 }
 
+export async function getOptionalUser() {
+  return getSessionUser();
+}
+
 export async function requireAdmin() {
   const user = await requireUser();
   if ((user as any).role !== "admin") throw new Response("Forbidden", { status: 403 });

@@ -257,6 +257,8 @@ export const orders = pgTable("orders", {
   referralDiscount:   integer("referral_discount").notNull().default(0),   // paise
   appliedOfferId:     uuid("applied_offer_id"),                              // FK to offers
   offerDiscountPaise: integer("offer_discount_paise").notNull().default(0), // paise
+  isGuestCheckout:    boolean("is_guest_checkout").notNull().default(false),
+  guestAccountCreated: boolean("guest_account_created").notNull().default(false),
   ...timestamps,
 }, (t) => [
   uniqueIndex("orders_order_number_idx").on(t.orderNumber),
@@ -320,8 +322,34 @@ export const storeSettings = pgTable("store_settings", {
   maxCoinsPctPerOrder:      integer("max_coins_pct_per_order").notNull().default(20),     // % of order value
   coinExpiryDays:           integer("coin_expiry_days").notNull().default(365),
   maxTotalDiscountPercent:  integer("max_total_discount_percent").notNull().default(20),
+  codMaxGuestOrderPaise:    integer("cod_max_guest_order_paise").notNull().default(1000000), // ₹10,000 default
   ...timestamps,
 });
+
+// ─── Guest Order Tokens (let existing-email guests view order without login) ──
+
+export const guestOrderTokens = pgTable("guest_order_tokens", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  orderId:   uuid("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  token:     text("token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("guest_order_tokens_token_idx").on(t.token),
+  index("guest_order_tokens_order_idx").on(t.orderId),
+]);
+
+// ─── Guest Rate Limits (IP / phone abuse protection) ─────────────────────────
+
+export const guestRateLimits = pgTable("guest_rate_limits", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  key:         text("key").notNull(),       // IP address or phone number
+  endpoint:    text("endpoint").notNull(),  // e.g. "placeOrder"
+  count:       integer("count").notNull().default(1),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("guest_rate_limits_key_idx").on(t.key, t.endpoint),
+]);
 
 // ─── Order History ────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ export type CouponResult =
 export async function validateCoupon(
   code: string,
   orderSubtotal: number,
-  userId: string,
+  userId: string | null,
 ): Promise<CouponResult> {
   const [coupon] = await db
     .select()
@@ -31,7 +31,7 @@ export async function validateCoupon(
     return { valid: false, error: "Coupon usage limit has been reached" };
   }
 
-  if (coupon.perUserLimit !== null) {
+  if (coupon.perUserLimit !== null && userId) {
     const [{ n: userUsage }] = await db
       .select({ n: count() })
       .from(couponUsages)
@@ -42,6 +42,7 @@ export async function validateCoupon(
   }
 
   if (coupon.firstOrderOnly) {
+    if (!userId) return { valid: false, error: "This coupon is only valid on your first order" };
     const [{ n: prevOrders }] = await db
       .select({ n: count() })
       .from(orders)

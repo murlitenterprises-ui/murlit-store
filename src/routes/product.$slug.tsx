@@ -224,7 +224,7 @@ function ProductPage() {
                       setAdding(true);
                       try {
                         await add(product.id, qty);
-                        navigate({ to: "/cart" });
+                        navigate({ to: "/checkout" });
                       } finally { setAdding(false); }
                     }}
                     disabled={product.stock === 0 || adding}

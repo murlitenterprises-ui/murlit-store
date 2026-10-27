@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, ChevronLeft, ChevronRight, Minus, Plus, Star, ShoppingBag, Check, Loader2, ExternalLink, X } from "lucide-react";
+import { Heart, ChevronLeft, ChevronRight, Minus, Plus, Star, ShoppingBag, Check, Loader2, ExternalLink, Zap } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -71,6 +71,20 @@ function QuickViewBody({ slug, onClose }: { slug: string; onClose: () => void })
       await add(product.id, qty);
       setAdded(true);
       setTimeout(() => setAdded(false), 1500);
+    } catch {
+      // cart context toasts error
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!product || product.stock < 1 || adding) return;
+    setAdding(true);
+    try {
+      await add(product.id, qty);
+      onClose();
+      navigate({ to: "/checkout" });
     } catch {
       // cart context toasts error
     } finally {
@@ -189,22 +203,33 @@ function QuickViewBody({ slug, onClose }: { slug: string; onClose: () => void })
         )}
 
         {/* Actions */}
-        <div className="mt-auto flex gap-2">
-          <button
-            onClick={handleAdd}
-            disabled={outOfStock || adding}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition press disabled:cursor-not-allowed disabled:opacity-60
-              ${outOfStock ? "bg-muted text-muted-foreground" : added ? "bg-leaf text-white" : "bg-maroon text-on-dark hover:bg-burgundy"}`}
-          >
-            {adding ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding…</> :
-             outOfStock ? "Out of Stock" :
-             added ? <><Check className="h-4 w-4" /> Added ✓</> :
-             <><ShoppingBag className="h-4 w-4" /> Add to Cart</>}
-          </button>
-          <button onClick={handleWishlist} aria-label="Wishlist"
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition hover:border-maroon">
-            <Heart className={`h-5 w-5 ${liked ? "fill-maroon text-maroon" : ""}`} />
-          </button>
+        <div className="mt-auto space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={handleAdd}
+              disabled={outOfStock || adding}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition press disabled:cursor-not-allowed disabled:opacity-60
+                ${outOfStock ? "bg-muted text-muted-foreground" : added ? "bg-leaf text-white" : "bg-maroon text-on-dark hover:bg-burgundy"}`}
+            >
+              {adding ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding…</> :
+               outOfStock ? "Out of Stock" :
+               added ? <><Check className="h-4 w-4" /> Added ✓</> :
+               <><ShoppingBag className="h-4 w-4" /> Add to Cart</>}
+            </button>
+            <button onClick={handleWishlist} aria-label="Wishlist"
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition hover:border-maroon">
+              <Heart className={`h-5 w-5 ${liked ? "fill-maroon text-maroon" : ""}`} />
+            </button>
+          </div>
+          {!outOfStock && (
+            <button
+              onClick={handleBuyNow}
+              disabled={adding}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-maroon py-3 text-sm font-semibold text-maroon hover:bg-maroon hover:text-white transition press disabled:opacity-60"
+            >
+              <Zap className="h-4 w-4" /> Buy Now
+            </button>
+          )}
         </div>
 
         <Link to="/product/$slug" params={{ slug: product.slug }} onClick={onClose}
