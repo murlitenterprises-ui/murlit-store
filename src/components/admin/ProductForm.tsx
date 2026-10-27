@@ -14,7 +14,7 @@ import { Loader2, Upload, Trash2, ArrowUp, ArrowDown, Star } from "lucide-react"
 // ─── Schema ────────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  name: z.string().min(1, "Required"),
+  name: z.string().trim().min(2, "Name must be at least 2 characters"),
   slug: z.string().min(1).regex(/^[a-z0-9-]+$/, "Lowercase, numbers, hyphens only"),
   shortDescription: z.string().optional(),
   description: z.string().optional(),

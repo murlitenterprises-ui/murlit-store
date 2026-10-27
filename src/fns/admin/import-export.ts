@@ -209,6 +209,7 @@ export const previewImport = createServerFn({ method: "POST" })
       // Required fields (name/category/price only required for new products)
       if (!sku) errors.push("sku is required");
       if (!isUpdateCheck && !name) errors.push("name is required");
+      else if (name && name.length < 2) errors.push("name must be at least 2 characters");
       if (!isUpdateCheck && !categorySlug) errors.push("category_slug is required");
       if (!isUpdateCheck && priceRs === null) errors.push("price_rs is required and must be a number");
       else if (priceRs !== null && priceRs < 0) errors.push("price_rs must be >= 0");
