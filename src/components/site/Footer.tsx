@@ -25,10 +25,12 @@ const cols: NavCol[] = [
     { label: "Contact Us",          href: "/#contact" },
   ]},
   { t: "Company", links: [
-    { label: "Privacy Policy",      href: "/privacy-policy" },
-    { label: "Terms & Conditions",  href: "/terms" },
-    { label: "Refund Policy",       href: "/refund-policy" },
-    { label: "Shipping Policy",     href: "/shipping-policy" },
+    { label: "Our Story",           href: "/#story" },
+    { label: "Blog",                href: "/blog" },
+    { label: "Policies",            href: "/policies" },
+    { label: "Murlit Coins",        href: "/murlit-coins" },
+    { label: "Refer Friends",       href: "/refer" },
+    { label: "FAQs",                href: "/faqs" },
   ]},
 ];
 

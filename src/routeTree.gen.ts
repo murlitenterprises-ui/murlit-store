@@ -12,11 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as BlogRouteImport } from './routes/blog'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as FaqsRouteImport } from './routes/faqs'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MurlitCoinsRouteImport } from './routes/murlit-coins'
+import { Route as PoliciesRouteImport } from './routes/policies'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
+import { Route as ReferRouteImport } from './routes/refer'
 import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ShippingPolicyRouteImport } from './routes/shipping-policy'
@@ -57,6 +62,11 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogRoute = BlogRouteImport.update({
+  id: '/blog',
+  path: '/blog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CartRoute = CartRouteImport.update({
   id: '/cart',
   path: '/cart',
@@ -65,6 +75,11 @@ const CartRoute = CartRouteImport.update({
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqsRoute = FaqsRouteImport.update({
+  id: '/faqs',
+  path: '/faqs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -77,9 +92,24 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MurlitCoinsRoute = MurlitCoinsRouteImport.update({
+  id: '/murlit-coins',
+  path: '/murlit-coins',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoliciesRoute = PoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
   id: '/privacy-policy',
   path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReferRoute = ReferRouteImport.update({
+  id: '/refer',
+  path: '/refer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RefundPolicyRoute = RefundPolicyRouteImport.update({
@@ -207,11 +237,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
+  '/blog': typeof BlogRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
+  '/faqs': typeof FaqsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/murlit-coins': typeof MurlitCoinsRoute
+  '/policies': typeof PoliciesRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/refer': typeof ReferRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shipping-policy': typeof ShippingPolicyRoute
@@ -240,11 +275,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/blog': typeof BlogRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
+  '/faqs': typeof FaqsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/murlit-coins': typeof MurlitCoinsRoute
+  '/policies': typeof PoliciesRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/refer': typeof ReferRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shipping-policy': typeof ShippingPolicyRoute
@@ -274,11 +314,16 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
+  '/blog': typeof BlogRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
+  '/faqs': typeof FaqsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/murlit-coins': typeof MurlitCoinsRoute
+  '/policies': typeof PoliciesRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/refer': typeof ReferRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/shipping-policy': typeof ShippingPolicyRoute
@@ -310,11 +355,16 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/blog'
     | '/cart'
     | '/checkout'
+    | '/faqs'
     | '/forgot-password'
     | '/login'
+    | '/murlit-coins'
+    | '/policies'
     | '/privacy-policy'
+    | '/refer'
     | '/refund-policy'
     | '/reset-password'
     | '/shipping-policy'
@@ -343,11 +393,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/blog'
     | '/cart'
     | '/checkout'
+    | '/faqs'
     | '/forgot-password'
     | '/login'
+    | '/murlit-coins'
+    | '/policies'
     | '/privacy-policy'
+    | '/refer'
     | '/refund-policy'
     | '/reset-password'
     | '/shipping-policy'
@@ -376,11 +431,16 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/blog'
     | '/cart'
     | '/checkout'
+    | '/faqs'
     | '/forgot-password'
     | '/login'
+    | '/murlit-coins'
+    | '/policies'
     | '/privacy-policy'
+    | '/refer'
     | '/refund-policy'
     | '/reset-password'
     | '/shipping-policy'
@@ -411,11 +471,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRouteWithChildren
+  BlogRoute: typeof BlogRoute
   CartRoute: typeof CartRoute
   CheckoutRoute: typeof CheckoutRoute
+  FaqsRoute: typeof FaqsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
+  MurlitCoinsRoute: typeof MurlitCoinsRoute
+  PoliciesRoute: typeof PoliciesRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
+  ReferRoute: typeof ReferRoute
   RefundPolicyRoute: typeof RefundPolicyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ShippingPolicyRoute: typeof ShippingPolicyRoute
@@ -451,6 +516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blog': {
+      id: '/blog'
+      path: '/blog'
+      fullPath: '/blog'
+      preLoaderRoute: typeof BlogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cart': {
       id: '/cart'
       path: '/cart'
@@ -463,6 +535,13 @@ declare module '@tanstack/react-router' {
       path: '/checkout'
       fullPath: '/checkout'
       preLoaderRoute: typeof CheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faqs': {
+      id: '/faqs'
+      path: '/faqs'
+      fullPath: '/faqs'
+      preLoaderRoute: typeof FaqsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -479,11 +558,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/murlit-coins': {
+      id: '/murlit-coins'
+      path: '/murlit-coins'
+      fullPath: '/murlit-coins'
+      preLoaderRoute: typeof MurlitCoinsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/policies': {
+      id: '/policies'
+      path: '/policies'
+      fullPath: '/policies'
+      preLoaderRoute: typeof PoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy-policy': {
       id: '/privacy-policy'
       path: '/privacy-policy'
       fullPath: '/privacy-policy'
       preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refer': {
+      id: '/refer'
+      path: '/refer'
+      fullPath: '/refer'
+      preLoaderRoute: typeof ReferRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/refund-policy': {
@@ -707,11 +807,16 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRouteWithChildren,
+  BlogRoute: BlogRoute,
   CartRoute: CartRoute,
   CheckoutRoute: CheckoutRoute,
+  FaqsRoute: FaqsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
+  MurlitCoinsRoute: MurlitCoinsRoute,
+  PoliciesRoute: PoliciesRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
+  ReferRoute: ReferRoute,
   RefundPolicyRoute: RefundPolicyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ShippingPolicyRoute: ShippingPolicyRoute,

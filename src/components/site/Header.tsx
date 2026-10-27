@@ -29,14 +29,23 @@ const announcements = ["Custom Orders Available", "Bulk & Wholesale", "Worldwide
 
 const nav = [
   { label: "Home", href: "/" },
-  { label: "Shop", href: "/shop", mega: "shop" },
+  { label: "All Products", href: "/shop", mega: "shop" },
   { label: "Wedding", href: "/shop", mega: "wedding" },
   { label: "Pooja & Rituals", href: "/category/pooja-rituals", mega: "pooja" },
-  { label: "Handcrafted", href: "/category/crochet", mega: "crochet" },
+  { label: "Crochet", href: "/category/crochet", mega: "crochet" },
   { label: "Customized", href: "/#custom", emph: true },
   { label: "B2B / Bulk", href: "/#b2b", emph: true },
-  { label: "About", href: "/#story" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Other", href: "#", mega: "other" },
+];
+
+const otherLinks = [
+  { label: "Our Story",     href: "/#story" },
+  { label: "Blog",          href: "/blog" },
+  { label: "Policies",      href: "/policies" },
+  { label: "Murlit Coins",  href: "/murlit-coins" },
+  { label: "Refer Friends", href: "/refer" },
+  { label: "FAQs",          href: "/faqs" },
+  { label: "Contact Us",    href: "/#contact" },
 ];
 
 const promo = ["New Arrivals", "Best Sellers", "Customized", "Bulk Orders", "View All Products"];
@@ -366,7 +375,34 @@ export function Header() {
         </div>
 
         <nav className={`container-x hidden items-center justify-center gap-7 lg:flex transition-all duration-300 ${scrolled ? "h-8" : "h-[42px]"}`}>
-          {nav.map((n) => (
+          {nav.map((n) => n.mega === "other" ? (
+            <div key={n.label} className="relative">
+              <a
+                href={n.href}
+                aria-expanded={open === "other"}
+                aria-haspopup="true"
+                onPointerEnter={(e) => handleNavEnter("other", e)}
+                onPointerLeave={(e) => handleNavLeave("other", e)}
+                onClick={(e) => handleNavClick("other", e)}
+                onKeyDown={(e) => handleNavKeyDown("other", e)}
+                className="relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100"
+              >
+                Other<ChevronDown className="h-3 w-3" />
+              </a>
+              {open === "other" && (
+                <div
+                  onPointerEnter={handlePanelEnter}
+                  onPointerLeave={handlePanelLeave}
+                  className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border bg-background shadow-lift py-1 animate-menu-in"
+                >
+                  {otherLinks.map((l) => (
+                    <a key={l.label} href={l.href} onClick={() => setOpen(null)}
+                      className="block px-4 py-2 text-sm hover:bg-sage hover:text-maroon">{l.label}</a>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
             <a
               key={n.label}
               href={n.href}
@@ -486,7 +522,7 @@ export function Header() {
             {(() => {
               const cat = navCats.find((c) => c.slug === "crochet");
               const fallback = shopMenuColumns[4];
-              const title = cat ? cat.name : fallback.title;
+              const title = cat ? cat.name : "Crochet";
               const catImg = cat?.image ?? fallback.img;
               const links = cat
                 ? cat.children.map((ch) => ({ label: ch.name, href: `/category/crochet?sub=${ch.slug}` }))
@@ -605,10 +641,10 @@ export function Header() {
             {/* Expandable categories */}
             {(
               [
-                { label: "Shop",             mega: "shop",    rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
+                { label: "All Products",      mega: "shop",    rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
                 { label: "Wedding",          mega: "wedding", rowImg: img.wedding,            href: "/shop",                    viewAll: "/shop" },
                 { label: "Pooja & Rituals",  mega: "pooja",   rowImg: navCats.find(c => c.slug === "pooja-rituals")?.image ?? shopMenuColumns[0].img, href: "/category/pooja-rituals",  viewAll: "/category/pooja-rituals" },
-                { label: "Handcrafted",      mega: "crochet", rowImg: navCats.find(c => c.slug === "crochet")?.image ?? shopMenuColumns[4].img, href: "/category/crochet",        viewAll: "/category/crochet" },
+                { label: "Crochet",          mega: "crochet", rowImg: navCats.find(c => c.slug === "crochet")?.image ?? shopMenuColumns[4].img, href: "/category/crochet",        viewAll: "/category/crochet" },
               ] as const
             ).map((n, idx) => {
               const isOpen = mExp === n.label;
@@ -688,10 +724,26 @@ export function Header() {
               </a>
             </div>
 
-            {/* ── 5. SECONDARY LINKS ── */}
-            <div style={{ display: "flex", gap: 20, padding: "2px 18px 16px", animation: "drawer-item-in 280ms 330ms both" }}>
-              <a href="/#story" onClick={() => setMobile(false)} style={{ fontSize: 13, color: "#888", textDecoration: "none" }}>About</a>
-              <a href="/#contact" onClick={() => setMobile(false)} style={{ fontSize: 13, color: "#888", textDecoration: "none" }}>Contact</a>
+            {/* ── 5. OTHER EXPANDABLE ── */}
+            <div style={{ borderBottom: "1px solid rgba(184,145,63,0.15)", animation: "drawer-item-in 280ms 330ms both" }}>
+              <button
+                onClick={() => setMExp(mExp === "other" ? null : "other")}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", width: "100%", background: mExp === "other" ? "rgba(145,30,31,0.04)" : "transparent", border: "none", cursor: "pointer", textAlign: "left" }}>
+                <span className="font-display" style={{ fontSize: 17, flex: 1 }}>Other</span>
+                <ChevronDown style={{ width: 18, height: 18, flexShrink: 0, color: "var(--gold)", transition: "transform 300ms ease", transform: mExp === "other" ? "rotate(180deg)" : "rotate(0)" }} />
+              </button>
+              <div style={{ display: "grid", gridTemplateRows: mExp === "other" ? "1fr" : "0fr", transition: "grid-template-rows 300ms cubic-bezier(.4,0,.2,1)" }}>
+                <div style={{ overflow: "hidden" }}>
+                  <div style={{ padding: "6px 18px 10px", background: "var(--sage)" }}>
+                    {otherLinks.map((l) => (
+                      <a key={l.label} href={l.href} onClick={() => setMobile(false)}
+                        style={{ display: "block", padding: "8px 4px", fontSize: 14, textDecoration: "none", color: "inherit", borderBottom: "1px solid rgba(184,145,63,0.1)" }}>
+                        {l.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
