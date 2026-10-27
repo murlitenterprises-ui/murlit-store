@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -34,6 +34,32 @@ export const Route = createFileRoute("/category/$slug")({
   }),
   component: CategoryPage,
 });
+
+function SubCircleImage({ src, name, fallbackSrc }: { src?: string | null; name: string; fallbackSrc: string }) {
+  const [state, setState] = useState<"ok" | "fallback" | "letter">("ok");
+  const imgSrc = state === "ok" ? (src ?? fallbackSrc) : state === "fallback" ? fallbackSrc : null;
+
+  if (!imgSrc) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-amber-50 to-rose-100">
+        <span className="font-display text-2xl font-bold text-maroon">{name[0]?.toUpperCase()}</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={name}
+      loading="lazy"
+      decoding="async"
+      className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
+      onError={() => {
+        setState((s) => s === "ok" ? (src ? "fallback" : "letter") : "letter");
+      }}
+    />
+  );
+}
 
 function CategoryPage() {
   const { cat, products, total } = Route.useLoaderData();
@@ -107,13 +133,7 @@ function CategoryPage() {
                           : "border-4 border-background hover:border-maroon/40"
                       }`}
                     >
-                      <img
-                        src={child.image ?? fallbackImg}
-                        alt={child.name}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                      />
+                      <SubCircleImage src={child.image} name={child.name} fallbackSrc={fallbackImg} />
                     </div>
                     <div
                       className={`mt-2 text-xs font-semibold md:text-sm ${

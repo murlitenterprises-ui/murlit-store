@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle, LogOut, Settings } from "lucide-react";
+import { Search, User, Heart, ShoppingBag, Menu, X, ChevronDown, MessageCircle, LogOut, Settings, BookHeart, Newspaper, HelpCircle, Coins, Gift, ShieldCheck, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { img } from "@/lib/catalog";
 import { shopMenuColumns, weddingMenuColumns } from "@/lib/menu";
 import logoCompact from "@/assets/logo-compact.webp";
 import { searchProducts, getNavCategories } from "@/fns/catalog";
+import { getPublicStoreSettings } from "@/fns/checkout";
 import { formatPrice, CURRENCIES, type SupportedCurrency } from "@/lib/currency";
 import { useCurrency } from "@/lib/currency-context";
 import type { ProductRow, CategoryTree } from "@/lib/catalog-types";
@@ -38,17 +39,47 @@ const nav = [
   { label: "Other", href: "#", mega: "other" },
 ];
 
-const otherLinks = [
-  { label: "Our Story",     href: "/#story" },
-  { label: "Blog",          href: "/blog" },
-  { label: "Policies",      href: "/policies" },
-  { label: "Murlit Coins",  href: "/murlit-coins" },
-  { label: "Refer Friends", href: "/refer" },
-  { label: "FAQs",          href: "/faqs" },
-  { label: "Contact Us",    href: "/#contact" },
-];
+type OtherItem = { label: string; href: string; Icon: LucideIcon; sub: string };
+
+const otherSections: { about: OtherItem[]; rewards: OtherItem[] } = {
+  about: [
+    { label: "Our Story",   href: "/#story",   Icon: BookHeart,   sub: "Who we are & what we make" },
+    { label: "Blog",        href: "/blog",     Icon: Newspaper,   sub: "Ideas, rituals & gifting stories" },
+    { label: "FAQs",        href: "/faqs",     Icon: HelpCircle,  sub: "Orders, shipping & returns" },
+    { label: "Contact Us",  href: "/#contact", Icon: MessageCircle, sub: "We reply on WhatsApp & email" },
+  ],
+  rewards: [
+    { label: "Murlit Coins",  href: "/murlit-coins", Icon: Coins,       sub: "Earn & use coins on orders" },
+    { label: "Refer Friends", href: "/refer",         Icon: Gift,        sub: "Invite friends, earn coins" },
+    { label: "Policies",      href: "/policies",      Icon: ShieldCheck, sub: "Privacy, terms, refund, shipping" },
+  ],
+};
+
+const allOtherLinks = [...otherSections.about, ...otherSections.rewards];
 
 const promo = ["New Arrivals", "Best Sellers", "Customized", "Bulk Orders", "View All Products"];
+
+function OtherMenuLink({ item, onClose }: { item: OtherItem; onClose: () => void }) {
+  const { Icon, label, href, sub } = item;
+  return (
+    <a
+      href={href}
+      onClick={onClose}
+      className="group flex items-center gap-3 rounded-xl px-2.5 py-2 transition-all duration-150 hover:bg-[#fdf0e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-maroon"
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#f5ede4] transition-all duration-150 group-hover:bg-maroon">
+        <Icon className="h-4 w-4 text-maroon transition-colors duration-150 group-hover:text-on-dark" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1">
+          <span className="text-[13px] font-medium text-ink transition-colors duration-150 group-hover:text-maroon">{label}</span>
+          <span className="translate-x-0 text-maroon opacity-0 transition-all duration-150 group-hover:translate-x-0.5 group-hover:opacity-100 text-xs">→</span>
+        </div>
+        <p className="text-[11px] leading-snug text-muted-foreground">{sub}</p>
+      </div>
+    </a>
+  );
+}
 
 export function Header() {
   const [open, setOpen] = useState<string | null>(null);
@@ -151,6 +182,13 @@ export function Header() {
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
   });
+  const { data: pubSettings } = useQuery({
+    queryKey: ["publicSettings"],
+    queryFn: () => getPublicStoreSettings({ data: undefined }),
+    staleTime: 10 * 60_000,
+    gcTime: 20 * 60_000,
+  });
+  const waNumber = pubSettings?.whatsappNumber ?? null;
   const navCats: CategoryTree[] = navCatsData ?? [];
 
   const { data: session } = useSession();
@@ -387,18 +425,45 @@ export function Header() {
                 onKeyDown={(e) => handleNavKeyDown("other", e)}
                 className="relative flex h-11 items-center gap-1 text-[13px] font-semibold tracking-wide transition hover:text-maroon after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:bg-maroon after:transition hover:after:scale-x-100"
               >
-                Other<ChevronDown className="h-3 w-3" />
+                Other<ChevronDown className={`h-3 w-3 transition-transform duration-150 ${open === "other" ? "rotate-180" : ""}`} />
               </a>
               {open === "other" && (
                 <div
                   onPointerEnter={handlePanelEnter}
                   onPointerLeave={handlePanelLeave}
-                  className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border bg-background shadow-lift py-1 animate-menu-in"
+                  className="absolute right-0 top-[calc(100%+10px)] z-50 w-[520px] overflow-hidden rounded-2xl border border-[#e8d9b5] bg-[#fffdf7] shadow-[0_8px_40px_rgba(0,0,0,0.16)] animate-menu-in"
                 >
-                  {otherLinks.map((l) => (
-                    <a key={l.label} href={l.href} onClick={() => setOpen(null)}
-                      className="block px-4 py-2 text-sm hover:bg-sage hover:text-maroon">{l.label}</a>
-                  ))}
+                  {/* Caret */}
+                  <div className="absolute -top-[7px] right-5 h-3.5 w-3.5 rotate-45 border-l border-t border-[#e8d9b5] bg-[#fffdf7]" />
+                  {/* Two-column grid */}
+                  <div className="grid grid-cols-2 gap-x-4 p-5">
+                    <div>
+                      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold">About Murlit</p>
+                      {otherSections.about.map((item) => (
+                        <OtherMenuLink key={item.label} item={item} onClose={() => setOpen(null)} />
+                      ))}
+                    </div>
+                    <div>
+                      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Rewards &amp; Help</p>
+                      {otherSections.rewards.map((item) => (
+                        <OtherMenuLink key={item.label} item={item} onClose={() => setOpen(null)} />
+                      ))}
+                    </div>
+                  </div>
+                  {/* Bottom strip */}
+                  <div className="flex items-center justify-between border-t border-[#e8d9b5] bg-[#fdf8ef] px-5 py-3">
+                    <span className="text-xs text-muted-foreground">Need help choosing a gift?</span>
+                    {waNumber && (
+                      <a
+                        href={`https://wa.me/${waNumber.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full bg-maroon px-4 py-1.5 text-xs font-semibold text-on-dark transition hover:bg-burgundy"
+                      >
+                        Chat on WhatsApp
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -734,13 +799,19 @@ export function Header() {
               </button>
               <div style={{ display: "grid", gridTemplateRows: mExp === "other" ? "1fr" : "0fr", transition: "grid-template-rows 300ms cubic-bezier(.4,0,.2,1)" }}>
                 <div style={{ overflow: "hidden" }}>
-                  <div style={{ padding: "6px 18px 10px", background: "var(--sage)" }}>
-                    {otherLinks.map((l) => (
-                      <a key={l.label} href={l.href} onClick={() => setMobile(false)}
-                        style={{ display: "block", padding: "8px 4px", fontSize: 14, textDecoration: "none", color: "inherit", borderBottom: "1px solid rgba(184,145,63,0.1)" }}>
-                        {l.label}
-                      </a>
-                    ))}
+                  <div style={{ padding: "6px 14px 10px", background: "var(--sage)" }}>
+                    {allOtherLinks.map((l) => {
+                      const Icon = l.Icon;
+                      return (
+                        <a key={l.label} href={l.href} onClick={() => setMobile(false)}
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", textDecoration: "none", color: "inherit", borderBottom: "1px solid rgba(184,145,63,0.08)" }}>
+                          <span style={{ display: "grid", placeItems: "center", width: 34, height: 34, borderRadius: "50%", background: "rgba(145,30,31,0.08)", flexShrink: 0 }}>
+                            <Icon style={{ width: 16, height: 16, color: "var(--maroon)" }} />
+                          </span>
+                          <span style={{ fontSize: 14, fontWeight: 500 }}>{l.label}</span>
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

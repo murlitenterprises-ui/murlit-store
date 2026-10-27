@@ -89,10 +89,11 @@ export const getPublicStoreSettings = createServerFn().handler(async () => {
       shippingFee: storeSettings.shippingFee,
       freeShippingAbove: storeSettings.freeShippingAbove,
       codEnabled: storeSettings.codEnabled,
+      whatsappNumber: storeSettings.whatsappNumber,
     })
     .from(storeSettings)
     .limit(1);
-  return rows[0] ?? { state: "Maharashtra", stateCode: "MH", shippingFee: 9900, freeShippingAbove: 50000, codEnabled: true };
+  return rows[0] ?? { state: "Maharashtra", stateCode: "MH", shippingFee: 9900, freeShippingAbove: 50000, codEnabled: true, whatsappNumber: null };
 });
 
 // ─── Compute checkout summary (server-authoritative GST) ─────────────────────
