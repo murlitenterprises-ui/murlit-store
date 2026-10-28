@@ -24,9 +24,17 @@ export const Route = createFileRoute("/order/$orderNumber")({
   },
   loader: async ({ params, deps }) => {
     if (deps.token) {
-      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: deps.token } });
+      try {
+        return await getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: deps.token } });
+      } catch {
+        throw redirect({ to: "/login" });
+      }
     }
-    return getMyOrder({ data: { orderNumber: params.orderNumber } });
+    try {
+      return await getMyOrder({ data: { orderNumber: params.orderNumber } });
+    } catch {
+      throw redirect({ to: "/login" });
+    }
   },
   component: OrderPage,
   errorComponent: ({ error }) => {
