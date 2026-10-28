@@ -17,14 +17,14 @@ export const Route = createFileRoute("/order/$orderNumber")({
   validateSearch: (s: Record<string, unknown>) => ({
     token: typeof s["token"] === "string" ? s["token"] : undefined,
   }),
+  loaderDeps: ({ search }) => ({ token: search.token }),
   beforeLoad: async ({ search }) => {
     const user = await getCurrentUser();
     if (!user && !search.token) throw redirect({ to: "/login" });
-    return { guestToken: search.token ?? null };
   },
-  loader: async ({ params, context }) => {
-    if (context.guestToken) {
-      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: context.guestToken } });
+  loader: async ({ params, deps }) => {
+    if (deps.token) {
+      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: deps.token } });
     }
     return getMyOrder({ data: { orderNumber: params.orderNumber } });
   },
