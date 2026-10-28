@@ -88,6 +88,7 @@ function CheckoutPage() {
   const [gstinError, setGstinError] = useState("");
   const [summary, setSummary] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
@@ -145,11 +146,14 @@ function CheckoutPage() {
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
-  // Recompute summary when address (or guest state), coupon, or coins toggle changes
+  const [retrySummary, setRetrySummary] = useState(0);
+
+  // Recompute summary when address (or guest state), coupon, coins, or retry changes
   useEffect(() => {
     const stateCode = isGuest ? guestStateCode : selectedAddress?.stateCode;
-    if (!stateCode) { setSummary(null); return; }
+    if (!stateCode) { setSummary(null); setSummaryError(false); return; }
     setSummaryLoading(true);
+    setSummaryError(false);
     getCheckoutSummary({
       data: {
         shippingStateCode: stateCode,
@@ -160,13 +164,14 @@ function CheckoutPage() {
     })
       .then((s) => {
         setSummary(s);
+        setSummaryError(!s && !!stateCode); // null with a valid stateCode = server error
         if (s?.couponError) setCouponError(s.couponError);
         else if (appliedCoupon) setCouponError(null);
         if (s?.coinBalance !== null && s?.coinBalance !== undefined) setCoinBalance(s.coinBalance);
       })
-      .catch(() => setSummary(null))
+      .catch(() => { setSummary(null); setSummaryError(true); })
       .finally(() => setSummaryLoading(false));
-  }, [selectedAddressId, guestStateCode, appliedCoupon, selectedOfferId, useCoins]);
+  }, [selectedAddressId, guestStateCode, appliedCoupon, selectedOfferId, useCoins, retrySummary]);
 
   // Load referral info + available coupons when address is selected (logged-in users only)
   useEffect(() => {
@@ -803,6 +808,11 @@ function CheckoutPage() {
               <div className="border-t pt-3 space-y-2 text-sm">
                 {summaryLoading ? (
                   <p className="text-xs text-gray-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Computing taxes…</p>
+                ) : summaryError ? (
+                  <div className="text-xs text-red-500 flex items-center justify-between">
+                    <span>Could not load totals</span>
+                    <button onClick={() => setRetrySummary(n => n + 1)} className="underline hover:text-red-700 ml-2">Retry</button>
+                  </div>
                 ) : summary ? (
                   <>
                     <div className="flex justify-between text-gray-600">

@@ -30,26 +30,32 @@ function getCartSessionKey(): string | null {
   return m?.[1] ?? null;
 }
 
-// Rate limit helper: returns true if the request should be blocked
+// Rate limit helper: returns true if the request should be blocked.
+// FAIL OPEN: any DB error is logged and the order is allowed through.
 async function isRateLimited(key: string, endpoint: string, maxCount: number, windowMs: number): Promise<boolean> {
-  const windowStart = new Date(Date.now() - windowMs);
-  const [existing] = await db
-    .select({ id: guestRateLimits.id, count: guestRateLimits.count })
-    .from(guestRateLimits)
-    .where(and(
-      eq(guestRateLimits.key, key),
-      eq(guestRateLimits.endpoint, endpoint),
-      gt(guestRateLimits.windowStart, windowStart),
-    ))
-    .limit(1);
+  try {
+    const windowStart = new Date(Date.now() - windowMs);
+    const [existing] = await db
+      .select({ id: guestRateLimits.id, count: guestRateLimits.count })
+      .from(guestRateLimits)
+      .where(and(
+        eq(guestRateLimits.key, key),
+        eq(guestRateLimits.endpoint, endpoint),
+        gt(guestRateLimits.windowStart, windowStart),
+      ))
+      .limit(1);
 
-  if (!existing) {
-    await db.insert(guestRateLimits).values({ key, endpoint }).catch(() => {});
+    if (!existing) {
+      await db.insert(guestRateLimits).values({ key, endpoint }).catch(() => {});
+      return false;
+    }
+    if (existing.count >= maxCount) return true;
+    await db.update(guestRateLimits).set({ count: existing.count + 1 }).where(eq(guestRateLimits.id, existing.id)).catch(() => {});
     return false;
+  } catch (e) {
+    console.error("[rate-limit] DB error (failing open):", e);
+    return false; // fail open — never block customers due to a table error
   }
-  if (existing.count >= maxCount) return true;
-  await db.update(guestRateLimits).set({ count: existing.count + 1 }).where(eq(guestRateLimits.id, existing.id)).catch(() => {});
-  return false;
 }
 
 // Normalize any state identifier to the 2-letter postal code from INDIAN_STATES.
@@ -183,6 +189,15 @@ export const getCheckoutSummary = createServerFn()
     useCoins: z.boolean().optional(),
   }))
   .handler(async ({ data }) => {
+    try {
+      return await getCheckoutSummaryImpl(data);
+    } catch (e: any) {
+      console.error("[getCheckoutSummary] Internal error:", e);
+      return null; // return null so the UI shows the "retry" state, not a crash
+    }
+  });
+
+async function getCheckoutSummaryImpl(data: { shippingStateCode: string; couponCode?: string; offerId?: string; useCoins?: boolean }) {
     const user = await getSessionUser();
 
     // Get cart — by userId for logged-in users, by sessionKey cookie for guests
@@ -389,7 +404,7 @@ export const getCheckoutSummary = createServerFn()
       maxCoinsPct,
       referralEnabled: settings?.referralEnabled ?? true,
     };
-  });
+}
 
 // ─── Place order ─────────────────────────────────────────────────────────────
 
@@ -409,9 +424,32 @@ const placeOrderSchema = z.object({
   honeypot: z.string().optional(),
 });
 
+// Known user-facing error messages that are safe to relay verbatim
+const USER_ERRORS = [
+  "Cart is empty", "Your cart is empty", "Invalid submission",
+  "Please fill in your contact information", "Enter a valid 10-digit phone number",
+  "Enter a valid phone number", "Please use a real email address",
+  "Too many orders", "not available", "Only ", "Cash on Delivery is not available",
+  "Guest COD orders are limited", "Failed to create account",
+];
+function isSafeUserError(msg: string) {
+  return USER_ERRORS.some(prefix => msg.startsWith(prefix) || msg.includes(prefix));
+}
+
 export const placeOrder = createServerFn()
   .validator(placeOrderSchema)
   .handler(async ({ data }) => {
+    try {
+      return await placeOrderImpl(data);
+    } catch (e: any) {
+      const msg: string = e?.message ?? "";
+      if (isSafeUserError(msg)) throw e; // relay known user errors
+      console.error("[placeOrder] Internal error:", e);
+      throw new Error("Something went wrong while placing your order. Please try again or contact us on WhatsApp.");
+    }
+  });
+
+async function placeOrderImpl(data: z.infer<typeof placeOrderSchema>) {
     const user = await getSessionUser();
 
     // ── Guest validation ──────────────────────────────────────────────────────────
@@ -822,7 +860,7 @@ export const placeOrder = createServerFn()
     }
 
     return { orderNumber: order.orderNumber, orderId: order.id, guestToken };
-  });
+}
 
 // ─── Get order (owner only) ───────────────────────────────────────────────────
 
