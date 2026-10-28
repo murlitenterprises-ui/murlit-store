@@ -30,7 +30,7 @@ function fmt(paise: number): string {
 function ShippingPolicyPage() {
   const { info, settings } = Route.useLoaderData();
   const name  = info.legalName ?? "Murlit Enterprises";
-  const email = info.businessEmail ?? info.supportEmail ?? "hello@murlit.in";
+  const email = info.businessEmail ?? info.supportEmail ?? "hello@murlit.com";
   const phone = info.whatsappNumber ?? info.phone ?? "";
   const shippingFee = settings?.shippingFee ?? 99_00;
   const freeAbove   = settings?.freeShippingAbove ?? 500_00;

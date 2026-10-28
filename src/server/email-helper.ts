@@ -1,7 +1,7 @@
 // Server-only email helpers — imported dynamically from auth.ts
 export async function sendPasswordResetEmail(userEmail: string, url: string): Promise<void> {
   const KEY = process.env.RESEND_API_KEY;
-  const FROM = process.env.EMAIL_FROM || "Murlit <noreply@murlit.in>";
+  const FROM = process.env.EMAIL_FROM || "Murlit <noreply@murlit.com>";
   if (!KEY) {
     console.log(`[email] Password reset for ${userEmail}: ${url}`);
     return;

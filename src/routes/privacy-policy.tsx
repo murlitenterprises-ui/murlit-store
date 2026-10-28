@@ -24,7 +24,7 @@ export const Route = createFileRoute("/privacy-policy")({
 function PrivacyPolicyPage() {
   const { info } = Route.useLoaderData();
   const name    = info.legalName ?? "Murlit Enterprises";
-  const email   = info.businessEmail ?? info.supportEmail ?? "hello@murlit.in";
+  const email   = info.businessEmail ?? info.supportEmail ?? "hello@murlit.com";
   const phone   = info.phone ?? "";
   const address = [info.addressLine1, info.addressLine2, info.city, info.pincode, info.state]
     .filter(Boolean).join(", ") || "Jaipur, Rajasthan, India";

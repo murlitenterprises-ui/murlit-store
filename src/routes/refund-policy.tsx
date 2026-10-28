@@ -24,7 +24,7 @@ export const Route = createFileRoute("/refund-policy")({
 function RefundPolicyPage() {
   const { info } = Route.useLoaderData();
   const name  = info.legalName ?? "Murlit Enterprises";
-  const email = info.businessEmail ?? info.supportEmail ?? "hello@murlit.in";
+  const email = info.businessEmail ?? info.supportEmail ?? "hello@murlit.com";
   const phone = info.whatsappNumber ?? info.phone ?? "";
 
   return (

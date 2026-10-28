@@ -309,7 +309,7 @@ function SettingsPage() {
           <SettingsField label="City" name="city" placeholder="Jaipur" register={register} errors={errors} />
           <SettingsField label="Pincode" name="pincode" placeholder="302001" hint="6-digit PIN code" register={register} errors={errors} />
           <SettingsField label="Business Phone" name="phone" placeholder="+91 98765 43210" register={register} errors={errors} />
-          <SettingsField label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.in" register={register} errors={errors} />
+          <SettingsField label="Business Email" name="businessEmail" type="email" placeholder="accounts@murlit.com" register={register} errors={errors} />
         </div>
         <SettingsField label="Registered Address (legacy, used on invoices as fallback)" name="registeredAddress"
           placeholder="Full one-line address" hint="If Address Line 1/City/Pincode are filled, those are preferred on invoices." register={register} errors={errors} />

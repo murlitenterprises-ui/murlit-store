@@ -48,7 +48,7 @@ export function Footer() {
           <ul className="mt-5 space-y-2 text-sm">
             <li className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-leaf" /> WhatsApp: +91 XXXXX XXXXX</li>
             <li className="flex items-center gap-2"><Phone className="h-4 w-4 text-maroon" /> +91 XXXXX XXXXX</li>
-            <li className="flex items-center gap-2"><Mail className="h-4 w-4 text-maroon" /> hello@murlit.example</li>
+            <li className="flex items-center gap-2"><Mail className="h-4 w-4 text-maroon" /> hello@murlit.com</li>
           </ul>
           <div className="mt-5 flex gap-2">
             {[Instagram, Facebook, Youtube, Linkedin].map((I, i) => (
