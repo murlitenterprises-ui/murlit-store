@@ -253,7 +253,7 @@ function CheckoutPage() {
     } else {
       if (!selectedAddress) { toast.error("Select a delivery address"); return; }
     }
-    if (!summary?.lineItems?.length) { toast.error("Your cart is empty"); return; }
+    if (!cart.length) { toast.error("Your cart is empty"); return; }
     if (isGstBusiness && !GSTIN_RE.test(gstin)) {
       setGstinError("Invalid GSTIN"); return;
     }
