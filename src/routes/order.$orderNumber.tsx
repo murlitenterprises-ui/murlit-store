@@ -20,14 +20,31 @@ export const Route = createFileRoute("/order/$orderNumber")({
   beforeLoad: async ({ search }) => {
     const user = await getCurrentUser();
     if (!user && !search.token) throw redirect({ to: "/login" });
+    return { guestToken: search.token ?? null };
   },
-  loader: async ({ params, search }) => {
-    if (search.token) {
-      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: search.token } });
+  loader: async ({ params, context }) => {
+    if (context.guestToken) {
+      return getOrderByGuestToken({ data: { orderNumber: params.orderNumber, token: context.guestToken } });
     }
     return getMyOrder({ data: { orderNumber: params.orderNumber } });
   },
   component: OrderPage,
+  errorComponent: ({ error }) => {
+    const params = Route.useParams();
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-50 mb-4">
+          <CheckCircle2 className="h-8 w-8 text-green-600" />
+        </div>
+        <h1 className="font-display text-2xl font-bold mb-2">Your order is placed ✅</h1>
+        <p className="text-muted-foreground mb-1">Order number: <span className="font-mono font-bold">{params.orderNumber}</span></p>
+        <p className="text-muted-foreground mb-6">We've emailed the details to you.</p>
+        <Link to="/" className="rounded-sm bg-royal px-6 py-2.5 text-sm font-bold text-on-dark hover:brightness-110 transition">
+          Go home
+        </Link>
+      </div>
+    );
+  },
 });
 
 function statusLabel(status: string) {
