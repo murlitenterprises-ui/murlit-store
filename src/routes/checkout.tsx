@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,7 +9,7 @@ import { Footer } from "@/components/site/Footer";
 import { getCurrentUser } from "@/fns/auth";
 import { listAddresses, createAddress } from "@/fns/addresses";
 import { getCart } from "@/fns/cart";
-import { getCheckoutSummary, placeOrder, createRazorpayOrder, verifyRazorpayPayment } from "@/fns/checkout";
+import { getCheckoutSummary, placeOrder, createRazorpayOrder, verifyRazorpayPayment, lookupPincode } from "@/fns/checkout";
 import { getAvailableCoupons } from "@/fns/coupons";
 import { getMyReferralInfo } from "@/fns/referral";
 import { inrFromPaise } from "@/lib/format";
@@ -72,6 +72,10 @@ function CheckoutPage() {
   // Guest inline address state (reuses same keys as addressSchema)
   const [guestState, setGuestState] = useState("");
   const [guestStateCode, setGuestStateCode] = useState("");
+  const [guestErrors, setGuestErrors] = useState<Record<string, string>>({});
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const stateSelectRef = useRef<HTMLSelectElement>(null);
+  const guestFormRef = useRef<HTMLDivElement>(null);
 
   const [addresses, setAddresses] = useState(initAddresses);
   const [selectedAddressId, setSelectedAddressId] = useState(
@@ -98,6 +102,40 @@ function CheckoutPage() {
   const addrForm = useForm<AddressForm>({ resolver: zodResolver(addressSchema) });
   const watchState = addrForm.watch("state");
   const { currency, rates } = useCurrency();
+
+  // Re-read state dropdown from DOM (handles Chrome autofill that skips onChange)
+  const syncStateFromDOM = useCallback(() => {
+    if (!stateSelectRef.current) return;
+    const val = stateSelectRef.current.value;
+    if (val && val !== guestState) {
+      setGuestState(val);
+      const st = INDIAN_STATES.find((s) => s.name === val);
+      setGuestStateCode(st?.code ?? "");
+    }
+  }, [guestState]);
+
+  // Pincode lookup on blur when 6 digits are entered
+  const handlePincodeBlur = useCallback(async (pincode: string) => {
+    if (!/^\d{6}$/.test(pincode)) return;
+    setPincodeLoading(true);
+    try {
+      const result = await lookupPincode({ data: { pincode } });
+      if (result) {
+        if (result.city && !addrForm.getValues("city")) {
+          addrForm.setValue("city", result.city);
+        }
+        if (result.stateCode && !guestStateCode) {
+          setGuestState(result.state);
+          setGuestStateCode(result.stateCode);
+          if (stateSelectRef.current) stateSelectRef.current.value = result.state;
+        }
+      }
+    } catch {
+      // fail silently
+    } finally {
+      setPincodeLoading(false);
+    }
+  }, [guestStateCode, addrForm]);
 
   // Update stateCode when state changes
   useEffect(() => {
@@ -180,12 +218,38 @@ function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
-    // Guest validation
+    // Sync autofilled DOM values before validating
+    if (isGuest) syncStateFromDOM();
+
+    // Guest validation with inline errors
     if (isGuest) {
-      if (!guestName.trim()) { toast.error("Please enter your name"); return; }
-      if (!guestEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) { toast.error("Please enter a valid email"); return; }
-      if (guestPhone.trim().length < 10) { toast.error("Please enter a valid 10-digit phone number"); return; }
-      if (!guestStateCode) { toast.error("Please select your state"); return; }
+      const errs: Record<string, string> = {};
+      if (!guestName.trim()) errs.guestName = "Required";
+      if (!guestEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) errs.guestEmail = "Enter a valid email";
+      if (guestPhone.replace(/\D/g, "").length < 10) errs.guestPhone = "Enter a valid 10-digit number";
+      // Re-read DOM for address fields that may have been autofilled
+      const formEl = guestFormRef.current;
+      const domLine1 = (formEl?.querySelector('input[name="line1"]') as HTMLInputElement)?.value || addrForm.getValues("line1");
+      const domCity = (formEl?.querySelector('input[name="city"]') as HTMLInputElement)?.value || addrForm.getValues("city");
+      const domPincode = (formEl?.querySelector('input[name="pincode"]') as HTMLInputElement)?.value || addrForm.getValues("pincode");
+      if (domLine1 && domLine1 !== addrForm.getValues("line1")) addrForm.setValue("line1", domLine1);
+      if (domCity && domCity !== addrForm.getValues("city")) addrForm.setValue("city", domCity);
+      if (domPincode && domPincode !== addrForm.getValues("pincode")) addrForm.setValue("pincode", domPincode);
+      if (!domLine1?.trim()) errs.line1 = "Required";
+      if (!domCity?.trim()) errs.city = "Required";
+      if (!domPincode || !/^\d{6}$/.test(domPincode)) errs.pincode = "6-digit pincode required";
+      const stateVal = stateSelectRef.current?.value || guestState;
+      const stateCodeVal = INDIAN_STATES.find((s) => s.name === stateVal)?.code || guestStateCode;
+      if (!stateCodeVal) errs.guestState = "Select your state";
+      setGuestErrors(errs);
+      if (Object.keys(errs).length > 0) {
+        const missing = Object.values(errs);
+        toast.error("Please fill in: " + missing.slice(0, 3).join(", "));
+        // Scroll to first error field
+        const firstErr = document.querySelector('[data-error="true"]') as HTMLElement;
+        firstErr?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
     } else {
       if (!selectedAddress) { toast.error("Select a delivery address"); return; }
     }
@@ -195,6 +259,8 @@ function CheckoutPage() {
     }
 
     // Build shipping address from guest form or saved address
+    const stateVal = stateSelectRef.current?.value || guestState;
+    const stateCodeVal = INDIAN_STATES.find((s) => s.name === stateVal)?.code || guestStateCode;
     const shippingAddr = isGuest
       ? {
           name: guestName.trim(),
@@ -202,8 +268,8 @@ function CheckoutPage() {
           line1: addrForm.getValues("line1"),
           line2: addrForm.getValues("line2") || undefined,
           city: addrForm.getValues("city"),
-          state: guestState,
-          stateCode: guestStateCode,
+          state: stateVal,
+          stateCode: stateCodeVal,
           pincode: addrForm.getValues("pincode"),
         }
       : {
@@ -216,13 +282,6 @@ function CheckoutPage() {
           stateCode: selectedAddress!.stateCode,
           pincode: selectedAddress!.pincode,
         };
-
-    // Validate guest address fields
-    if (isGuest) {
-      if (!shippingAddr.line1?.trim()) { toast.error("Please enter your street address"); return; }
-      if (!shippingAddr.city?.trim()) { toast.error("Please enter your city"); return; }
-      if (!shippingAddr.pincode || shippingAddr.pincode.length !== 6) { toast.error("Please enter a valid 6-digit pincode"); return; }
-    }
 
     setPlacing(true);
     let successOrderNumber: string | undefined;
@@ -367,18 +426,48 @@ function CheckoutPage() {
                     onChange={(e) => setGuestHoneypot(e.target.value)}
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
+                    <div data-error={!!guestErrors.guestName || undefined}>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
-                      <input value={guestName} onChange={(e) => setGuestName(e.target.value)} className={inp} placeholder="Your full name" />
+                      <input
+                        value={guestName}
+                        onChange={(e) => { setGuestName(e.target.value); setGuestErrors((p) => ({ ...p, guestName: "" })); }}
+                        onInput={(e) => { setGuestName((e.target as HTMLInputElement).value); setGuestErrors((p) => ({ ...p, guestName: "" })); }}
+                        onBlur={(e) => setGuestName(e.target.value)}
+                        className={inp + (guestErrors.guestName ? " border-red-400" : "")}
+                        placeholder="Your full name"
+                        autoComplete="name"
+                      />
+                      {guestErrors.guestName && <p className="text-xs text-red-600 mt-0.5">{guestErrors.guestName}</p>}
                     </div>
-                    <div>
+                    <div data-error={!!guestErrors.guestPhone || undefined}>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Phone *</label>
-                      <input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} className={inp} placeholder="10-digit mobile" inputMode="tel" />
+                      <input
+                        value={guestPhone}
+                        onChange={(e) => { setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setGuestErrors((p) => ({ ...p, guestPhone: "" })); }}
+                        onInput={(e) => { setGuestPhone((e.target as HTMLInputElement).value.replace(/\D/g, "").slice(0, 10)); }}
+                        onBlur={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        className={inp + (guestErrors.guestPhone ? " border-red-400" : "")}
+                        placeholder="10-digit mobile"
+                        inputMode="tel"
+                        autoComplete="tel"
+                      />
+                      {guestErrors.guestPhone && <p className="text-xs text-red-600 mt-0.5">{guestErrors.guestPhone}</p>}
                     </div>
                   </div>
-                  <div>
+                  <div data-error={!!guestErrors.guestEmail || undefined}>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
-                    <input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} className={inp} placeholder="Your email address" type="email" inputMode="email" />
+                    <input
+                      value={guestEmail}
+                      onChange={(e) => { setGuestEmail(e.target.value); setGuestErrors((p) => ({ ...p, guestEmail: "" })); }}
+                      onInput={(e) => { setGuestEmail((e.target as HTMLInputElement).value); }}
+                      onBlur={(e) => setGuestEmail(e.target.value)}
+                      className={inp + (guestErrors.guestEmail ? " border-red-400" : "")}
+                      placeholder="Your email address"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                    />
+                    {guestErrors.guestEmail && <p className="text-xs text-red-600 mt-0.5">{guestErrors.guestEmail}</p>}
                     <p className="text-xs text-gray-400 mt-0.5">Your order confirmation will be sent here. We'll also create a free Murlit account.</p>
                   </div>
                   <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
@@ -412,41 +501,89 @@ function CheckoutPage() {
               ))}
               {/* Guest: always-visible inline address form */}
               {isGuest && (
-                <div className="space-y-3">
-                  <div>
+                <div className="space-y-3" ref={guestFormRef}>
+                  <div data-error={!!guestErrors.line1 || undefined}>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 1 *</label>
-                    <input {...addrForm.register("line1")} className={inp} placeholder="House/Flat, Street" />
+                    <input
+                      {...addrForm.register("line1")}
+                      className={inp + (guestErrors.line1 ? " border-red-400" : "")}
+                      placeholder="House/Flat, Street"
+                      autoComplete="address-line1"
+                      onBlur={(e) => { addrForm.setValue("line1", e.target.value); setGuestErrors((p) => ({ ...p, line1: "" })); }}
+                    />
+                    {guestErrors.line1 && <p className="text-xs text-red-600 mt-0.5">{guestErrors.line1}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 2</label>
-                    <input {...addrForm.register("line2")} className={inp} placeholder="Area, Landmark (optional)" />
+                    <input
+                      {...addrForm.register("line2")}
+                      className={inp}
+                      placeholder="Area, Landmark (optional)"
+                      autoComplete="address-line2"
+                      onBlur={(e) => addrForm.setValue("line2", e.target.value)}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    <div data-error={!!guestErrors.city || undefined}>
                       <label className="block text-xs font-medium text-gray-700 mb-1">City *</label>
-                      <input {...addrForm.register("city")} className={inp} placeholder="City" />
+                      <input
+                        {...addrForm.register("city")}
+                        className={inp + (guestErrors.city ? " border-red-400" : "")}
+                        placeholder="City"
+                        autoComplete="address-level2"
+                        onBlur={(e) => { addrForm.setValue("city", e.target.value); setGuestErrors((p) => ({ ...p, city: "" })); }}
+                      />
+                      {guestErrors.city && <p className="text-xs text-red-600 mt-0.5">{guestErrors.city}</p>}
                     </div>
-                    <div>
+                    <div data-error={!!guestErrors.pincode || undefined}>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Pincode *</label>
-                      <input {...addrForm.register("pincode")} className={inp} placeholder="6-digit" maxLength={6} />
+                      <div className="relative">
+                        <input
+                          {...addrForm.register("pincode")}
+                          className={inp + (guestErrors.pincode ? " border-red-400" : "")}
+                          placeholder="6-digit"
+                          maxLength={6}
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                          onBlur={(e) => {
+                            addrForm.setValue("pincode", e.target.value);
+                            setGuestErrors((p) => ({ ...p, pincode: "" }));
+                            handlePincodeBlur(e.target.value);
+                          }}
+                        />
+                        {pincodeLoading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">…</span>}
+                      </div>
+                      {guestErrors.pincode && <p className="text-xs text-red-600 mt-0.5">{guestErrors.pincode}</p>}
                     </div>
                   </div>
-                  <div>
+                  <div data-error={!!guestErrors.guestState || undefined}>
                     <label className="block text-xs font-medium text-gray-700 mb-1">State *</label>
                     <select
+                      ref={stateSelectRef}
                       value={guestState}
                       onChange={(e) => {
                         setGuestState(e.target.value);
                         const st = INDIAN_STATES.find((s) => s.name === e.target.value);
                         setGuestStateCode(st?.code ?? "");
+                        setGuestErrors((p) => ({ ...p, guestState: "" }));
                       }}
-                      className={inp}
+                      onInput={(e) => {
+                        const val = (e.target as HTMLSelectElement).value;
+                        setGuestState(val);
+                        const st = INDIAN_STATES.find((s) => s.name === val);
+                        setGuestStateCode(st?.code ?? "");
+                        setGuestErrors((p) => ({ ...p, guestState: "" }));
+                      }}
+                      onBlur={syncStateFromDOM}
+                      className={inp + (guestErrors.guestState ? " border-red-400" : "")}
+                      autoComplete="address-level1"
                     >
                       <option value="">Select state</option>
                       {INDIAN_STATES.map((s) => (
                         <option key={s.code} value={s.name}>{s.name}</option>
                       ))}
                     </select>
+                    {guestErrors.guestState && <p className="text-xs text-red-600 mt-0.5">{guestErrors.guestState}</p>}
                   </div>
                 </div>
               )}
@@ -465,36 +602,46 @@ function CheckoutPage() {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
-                          <input {...addrForm.register("name")} className={inp} placeholder="Name" />
+                          <input {...addrForm.register("name")} className={inp} placeholder="Name" autoComplete="name" />
                           {addrForm.formState.errors.name && <p className="text-xs text-red-600">{addrForm.formState.errors.name.message}</p>}
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Phone *</label>
-                          <input {...addrForm.register("phone")} className={inp} placeholder="10-digit mobile" />
+                          <input {...addrForm.register("phone")} className={inp} placeholder="10-digit mobile" autoComplete="tel" inputMode="tel" />
                           {addrForm.formState.errors.phone && <p className="text-xs text-red-600">{addrForm.formState.errors.phone.message}</p>}
                         </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 1 *</label>
-                        <input {...addrForm.register("line1")} className={inp} placeholder="House/Flat, Street" />
+                        <input {...addrForm.register("line1")} className={inp} placeholder="House/Flat, Street" autoComplete="address-line1" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Address Line 2</label>
-                        <input {...addrForm.register("line2")} className={inp} placeholder="Area, Landmark (optional)" />
+                        <input {...addrForm.register("line2")} className={inp} placeholder="Area, Landmark (optional)" autoComplete="address-line2" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">City *</label>
-                          <input {...addrForm.register("city")} className={inp} placeholder="City" />
+                          <input {...addrForm.register("city")} className={inp} placeholder="City" autoComplete="address-level2" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Pincode *</label>
-                          <input {...addrForm.register("pincode")} className={inp} placeholder="6-digit" maxLength={6} />
+                          <input {...addrForm.register("pincode")} className={inp} placeholder="6-digit" maxLength={6} inputMode="numeric" autoComplete="postal-code" />
                         </div>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">State *</label>
-                        <select {...addrForm.register("state")} className={inp}>
+                        <select
+                          {...addrForm.register("state")}
+                          className={inp}
+                          autoComplete="address-level1"
+                          onInput={(e) => {
+                            const val = (e.target as HTMLSelectElement).value;
+                            addrForm.setValue("state", val);
+                            const st = INDIAN_STATES.find((s) => s.name === val);
+                            if (st) addrForm.setValue("stateCode", st.code);
+                          }}
+                        >
                           <option value="">Select state</option>
                           {INDIAN_STATES.map((s) => (
                             <option key={s.code} value={s.name}>{s.name}</option>
@@ -725,13 +872,13 @@ function CheckoutPage() {
                     )}
                   </>
                 ) : (
-                  <p className="text-xs text-gray-400">Select an address to see GST breakdown</p>
+                  <p className="text-xs text-gray-400">{isGuest ? "Enter your state and pincode to see GST and total" : "Select an address to see GST breakdown"}</p>
                 )}
               </div>
 
               <button
                 onClick={handlePlaceOrder}
-                disabled={placing || (!isGuest && !selectedAddress) || !summary || summaryLoading}
+                disabled={placing || summaryLoading}
                 className="w-full flex items-center justify-center gap-2 rounded-sm bg-[var(--maroon)] py-3.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-60 transition-opacity"
               >
                 {placing ? (
@@ -740,6 +887,9 @@ function CheckoutPage() {
                   <><CheckCircle2 className="h-4 w-4" /> {paymentMethod === "cod" ? "Place Order (COD)" : "Pay Now"}</>
                 )}
               </button>
+              {isGuest && !guestStateCode && !placing && (
+                <p className="text-[11px] text-amber-600 text-center">Enter your state and pincode to see GST and total</p>
+              )}
               <p className="text-[10px] text-gray-400 text-center">By placing the order you agree to our terms and conditions</p>
             </div>
           </div>

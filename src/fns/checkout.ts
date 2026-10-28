@@ -91,6 +91,32 @@ export function computeItemGst(
   }
 }
 
+// ─── Pincode lookup (postalpincode.in) ───────────────────────────────────────
+
+export const lookupPincode = createServerFn()
+  .validator(z.object({ pincode: z.string().length(6) }))
+  .handler(async ({ data }) => {
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${data.pincode}`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!res.ok) return null;
+      const json = await res.json() as any[];
+      const record = json?.[0];
+      if (record?.Status !== "Success" || !record.PostOffice?.length) return null;
+      const po = record.PostOffice[0];
+      const stateName: string = po.State ?? "";
+      const st = INDIAN_STATES.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
+      return {
+        city: (po.District || po.Division || po.Block || "") as string,
+        state: stateName,
+        stateCode: st?.code ?? "",
+      };
+    } catch {
+      return null;
+    }
+  });
+
 // ─── Public legal/contact info (for legal pages) ─────────────────────────────
 
 export const getLegalStoreInfo = createServerFn().handler(async () => {
